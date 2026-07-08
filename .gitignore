@@ -1,0 +1,19 @@
+# Firebase local cache and debug logs
+.firebase/
+firebase-debug.log*
+
+# Dependencies
+node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor settings
+.vscode/
+.idea/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
