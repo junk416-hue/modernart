@@ -118,11 +118,11 @@ function variety(){ var s={},n=0; for(var i=0;i<S.art.length;i++){ s[S.art[i].mi
 
 /* ---------- placement ---------- */
 function pickPlace(){
-  var idx=curShapes(), cell=S.order[idx%S.order.length];
-  var fx=L.frame.x+(cell[0]+0.5+(Math.random()-0.5)*0.4)/4*L.frame.w;
-  var fy=L.frame.y+(cell[1]+0.5+(Math.random()-0.5)*0.4)/5*L.frame.h;
   var base=Math.min(L.frame.w/4,L.frame.h/5);
-  return {x:fx,y:fy,s:base*(0.6+Math.random()*0.5)};
+  var s=base*(0.18+Math.random()*1.15);
+  var fx=L.frame.x + s + Math.random()*(L.frame.w - 2*s);
+  var fy=L.frame.y + s + Math.random()*(L.frame.h - 2*s);
+  return {x:fx,y:fy,s:s};
 }
 function commitArt(f){ S.art.push({k:f.kind,x:f.tx,y:f.ty,mix:f.mix,s:f.s,rot:f.rot,t:0,pattern:f.pattern}); spawnGlint(f.tx,f.ty,f.mix[0].col); }
 
