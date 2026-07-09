@@ -113,6 +113,40 @@ function freshState(){
   return st;
 }
 
+/* ---------- persistence ---------- */
+var SAVE_KEY='modernart.save.v1';
+// Everything in S is plain JSON data except gallery[].img, which is an <img>
+// element; we store its data-URL src instead and rebuild the image on load.
+function serializeState(withThumbs){
+  var snap={};
+  for(var k in S){ if(k==='gallery'||k==='__proto__') continue; snap[k]=S[k]; }
+  snap.gallery=S.gallery.map(function(e){
+    return withThumbs ? {src:(e.img&&e.img.src)||'', val:e.val} : {val:e.val};
+  });
+  return snap;
+}
+function saveGame(){
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(true)));
+  }catch(err){
+    // typically a quota error from the gallery thumbnails — keep progress, drop the images
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(false))); }catch(e2){}
+  }
+}
+function loadGame(){
+  var raw; try{ raw=localStorage.getItem(SAVE_KEY); }catch(e){ return null; }
+  if(!raw) return null;
+  var data; try{ data=JSON.parse(raw); }catch(e){ return null; }
+  if(!data || typeof data.money!=='number') return null;
+  var st=freshState();                       // defaults, so fields added since the save still exist
+  for(var k in data){ if(k==='gallery'||k==='__proto__') continue; st[k]=data[k]; }
+  st.gallery=[];
+  if(data.gallery){ for(var i=0;i<data.gallery.length;i++){ var e=data.gallery[i];
+    if(e&&e.src){ var img=new Image(); img.src=e.src; st.gallery.push({img:img,val:e.val}); }
+  } }
+  return st;
+}
+
 /* ---------- derived ---------- */
 function fameMult(){ return 1 + S.fame*0.3; }
 function requiredShapes(){ return Math.max(5, 10 - S.fame); }             // hidden mechanic, floor of 5
@@ -1528,11 +1562,16 @@ function drawWarn(){ if(!S.warn) return; var w=S.warn, r=14+w.t*16, a=1-w.t;
   ctx.beginPath(); ctx.moveTo(w.x-r*0.6,w.y-r*0.6); ctx.lineTo(w.x+r*0.6,w.y+r*0.6); ctx.stroke(); ctx.globalAlpha=1; }
 
 /* ---------- loop ---------- */
-var last=0;
-function frame(ts){ var dt=Math.min(0.05,(ts-last)/1000||0); last=ts; time+=dt; update(dt); draw(); requestAnimationFrame(frame); }
+var last=0, saveAcc=0;
+function frame(ts){ var dt=Math.min(0.05,(ts-last)/1000||0); last=ts; time+=dt; update(dt); draw();
+  if(!TITLE){ saveAcc+=dt; if(saveAcc>=5){ saveAcc=0; saveGame(); } }   // autosave every 5s of play
+  requestAnimationFrame(frame); }
 
 /* ---------- boot ---------- */
-S=freshState(); resize(); requestAnimationFrame(frame);
+S=loadGame()||freshState(); resize(); requestAnimationFrame(frame);
+// also flush a save when the tab is hidden or closed, so nothing is lost between ticks
+window.addEventListener('pagehide', function(){ if(!TITLE) saveGame(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden' && !TITLE) saveGame(); });
 })();
 </script>
 </body>
