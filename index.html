@@ -774,10 +774,11 @@ var BUILD = (function() {
   var dy = d.getDate();
   dy = dy < 10 ? '0' + dy : dy;
   var hr = d.getHours();
-  hr = hr < 10 ? '0' + hr : hr;
+  var ap = hr < 12 ? 'AM' : 'PM';
+  hr = hr % 12; if (hr === 0) hr = 12;
   var mn = d.getMinutes();
   mn = mn < 10 ? '0' + mn : mn;
-  return yr + "-" + mo + "-" + dy + " " + hr + ":" + mn;
+  return yr + "-" + mo + "-" + dy + " " + hr + ":" + mn + " " + ap;
 })();
 function skull(cx,cy,r,col,hole){
   ctx.fillStyle=col;
