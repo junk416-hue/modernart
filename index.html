@@ -458,6 +458,8 @@ function layout(){
   var gm = m, cols = 3, ggap = gm * 0.6;
   var gw = (W - 2 * gm - ggap * (cols - 1)) / cols, gh = gw * 1.08;
   L.galleryGrid = {x: gm, y: m + iconR * 2.2, w: W - 2 * gm, cols: cols, cell: gw, cellH: gh, gap: ggap};
+  var zbw = Math.min(160, W*0.42), zbh = Math.max(40, H*0.058);
+  L.zoomDownload = {x: W/2 - zbw/2, y: H - zbh - Math.max(30, H*0.05), w: zbw, h: zbh};   // "save" button in the zoom view
 }
 
 /* ---------- grain ---------- */
@@ -483,11 +485,19 @@ function onDown(x,y){
   audioInit(); if(AC&&AC.state==="suspended") AC.resume();
   if(TITLE){ TITLE=false; if(!S.mute) chord(NOTE[YEL]); return; }
   if(S.dead){ if(S.deadT>0.6) S=freshState(); return; }      // tap to restart after death
-  if(S.view==='gallery'){ S.view='main'; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return; }  // tap anywhere to leave gallery
+  if(S.view==='gallery'){                                    // gallery view
+    if(zoomIdx>=0){                                          // enlarged: save button, else back to grid
+      if(hitRect(x,y,L.zoomDownload)){ downloadImage(S.gallery[zoomIdx]); return; }
+      zoomIdx=-1; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return;
+    }
+    var gi=galleryHit(x,y);
+    if(gi>=0){ zoomIdx=gi; tone(NOTE[YEL]*1.2,0.12,"sine",0.35); return; }   // tap a painting to enlarge
+    S.view='main'; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return;            // tap elsewhere leaves the gallery
+  }
   var trashWasArmed = clearArm>0; clearArm=0;                 // any deliberate tap cancels a pending delete
   if(hitCircle(x,y,L.mute.cx,L.mute.cy,L.mute.r*1.3)){ S.mute=!S.mute; if(!S.mute) tone(NOTE[GRN],0.16,"sine",0.4); return; }
   if(hitCircle(x,y,L.gallery.cx,L.gallery.cy,L.gallery.r*1.3)){ buyGallery(); return; }
-  if(hitCircle(x,y,L.galleryView.cx,L.galleryView.cy,L.galleryView.r*1.3)){ S.view='gallery'; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return; }
+  if(hitCircle(x,y,L.galleryView.cx,L.galleryView.cy,L.galleryView.r*1.3)){ S.view='gallery'; zoomIdx=-1; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return; }
   if(hitCircle(x,y,L.clear.cx,L.clear.cy,L.clear.r*1.3)){ clearSave(trashWasArmed); return; }
   if(sellable() && hitCircle(x,y,L.sell.cx,L.sell.cy,L.sell.r*1.3)){ doSell(); return; }
   // per-colour auto-painters (buy) — checked first since the icon overlaps the swatch's rect
@@ -932,8 +942,28 @@ function drawGalleryViewBtn(){
     txt(""+Math.min(99,n), bx, by+3, Math.max(8,b.r*0.42), INK, "center");
   }
 }
+var zoomIdx=-1;   // index into S.gallery of the enlarged painting, or -1
+function galleryHit(x,y){
+  var G=L.galleryGrid, n=S.gallery.length;
+  for(var i=0;i<n;i++){
+    var col=i%G.cols, row=(i/G.cols)|0;
+    var gx=G.x+col*(G.cell+G.gap), gy=G.y+row*(G.cellH+G.gap);
+    if(x>=gx && x<=gx+G.cell && y>=gy && y<=gy+G.cell*0.86) return n-1-i;   // display order is newest-first
+  }
+  return -1;
+}
+function downloadImage(e){
+  if(!e || !e.img || !e.img.src) return;
+  try{
+    var a=document.createElement('a');
+    a.href=e.img.src; a.download='automat-painting.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    tone(NOTE[GRN],0.16,"sine",0.4);
+  }catch(err){}
+}
 function drawGalleryScreen(){
   var G=L.galleryGrid, n=S.gallery.length;
+  if(zoomIdx>=n) zoomIdx=-1;                        // guard: gallery can shrink (cap of 60)
   txt("sold paintings", W/2, m0()+L.icon*1.1, Math.max(13,W*0.04), INK, "center");
   if(n===0){ ctx.globalAlpha=0.5; txt("tap to go back", W/2, H*0.5, Math.max(12,W*0.035), INK, "center"); ctx.globalAlpha=1; return; }
   for(var i=0;i<n;i++){
@@ -947,7 +977,36 @@ function drawGalleryScreen(){
     var v=e.val||0, dp=Math.min(G.cell*0.05,4), gp=dp*2.4, tot=(v-1)*gp, bx=x+G.cell/2-tot/2, by=y+G.cell*0.86+dp*2.2;
     for(var k=0;k<v;k++){ ctx.fillStyle=GOLD; ctx.beginPath(); ctx.arc(bx+k*gp,by,dp,0,PI2); ctx.fill(); }
   }
-  ctx.globalAlpha=0.4; txt("tap anywhere to go back", W/2, H-24, Math.max(11,W*0.03), INK, "center"); ctx.globalAlpha=1;
+  if(zoomIdx>=0){ drawGalleryZoom(); return; }
+  ctx.globalAlpha=0.4; txt("tap a painting to enlarge", W/2, H-24, Math.max(11,W*0.03), INK, "center"); ctx.globalAlpha=1;
+}
+function drawGalleryZoom(){
+  var e=S.gallery[zoomIdx]; if(!e){ zoomIdx=-1; return; }
+  var img=e.img;
+  ctx.fillStyle="rgba(21,18,16,0.62)"; ctx.fillRect(0,0,W,H);   // dim the grid behind
+  // fit the painting into the upper area, preserving aspect
+  var aspect=(img.naturalWidth&&img.naturalHeight)?img.naturalWidth/img.naturalHeight:(L.frame.w/L.frame.h);
+  var maxW=W*0.86, maxH=H*0.56, iw=maxW, ih=iw/aspect;
+  if(ih>maxH){ ih=maxH; iw=ih*aspect; }
+  var ix=(W-iw)/2, iy=Math.max(m0()+L.icon*2, H*0.13);
+  ctx.fillStyle="#fff"; ctx.fillRect(ix-7,iy-7,iw+14,ih+14);
+  ctx.strokeStyle=INK; ctx.lineWidth=2.5; ctx.strokeRect(ix-7,iy-7,iw+14,ih+14);
+  if(img.complete) ctx.drawImage(img,ix,iy,iw,ih);
+  // value pips under the frame
+  var v=e.val||0, dp=Math.max(4,W*0.014), gp=dp*2.6, tot=(v-1)*gp, bx=W/2-tot/2, by=iy+ih+20;
+  for(var k=0;k<v;k++){ ctx.fillStyle=GOLD; ctx.beginPath(); ctx.arc(bx+k*gp,by,dp,0,PI2); ctx.fill(); }
+  // save button
+  var d=L.zoomDownload;
+  ctx.fillStyle=GOLD; roundRect(d.x,d.y,d.w,d.h,7); ctx.fill();
+  ctx.strokeStyle=INK; ctx.lineWidth=2; ctx.stroke();
+  // download glyph (down arrow into a tray) + label
+  var gy2=d.y+d.h/2, gx2=d.x+d.w*0.32, s=d.h*0.28;
+  ctx.strokeStyle=INK; ctx.fillStyle=INK; ctx.lineWidth=2.2; ctx.lineCap="round"; ctx.lineJoin="round";
+  ctx.beginPath(); ctx.moveTo(gx2,gy2-s); ctx.lineTo(gx2,gy2+s*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(gx2-s*0.6,gy2-s*0.1); ctx.lineTo(gx2,gy2+s*0.5); ctx.lineTo(gx2+s*0.6,gy2-s*0.1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(gx2-s*0.85,gy2+s*0.95); ctx.lineTo(gx2+s*0.85,gy2+s*0.95); ctx.stroke();
+  txt("save", d.x+d.w*0.52, gy2+Math.max(4,d.h*0.16), Math.max(13,d.h*0.36), INK, "left");
+  ctx.globalAlpha=0.55; txt("tap outside to go back", W/2, d.y-12, Math.max(11,W*0.03), PAPER, "center"); ctx.globalAlpha=1;
 }
 function m0(){ return Math.max(15,W*0.045); }
 
