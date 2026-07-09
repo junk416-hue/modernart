@@ -8,6 +8,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>AUTOMAT</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='10' width='80' height='80' rx='8' fill='%23EDE6D6' stroke='%23151210' stroke-width='8'/%3E%3Cpath d='M50 22 L58 42 L78 50 L58 58 L50 78 L42 58 L22 50 L42 42 Z' fill='%231E9E5A' stroke='%23151210' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M75 75 Q75 83 79 83 Q83 83 83 75 Q83 68 79 61 Q75 68 75 75 Z' fill='%23DE342B'/%3E%3C/svg%3E">
 <style>
   html,body{margin:0;padding:0;height:100%;background:#EDE6D6;overflow:hidden;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
@@ -22,13 +23,15 @@
 (function(){
 /* ---------- palette ---------- */
 var PAPER="#EDE6D6", INK="#151210", RED="#DE342B", BLUE="#2049C0", YEL="#F1C40F", GRN="#1E9E5A", WHITE="#FFFFFF", GOLD="#CE9A2C", MONEYGRN="#1E9E5A";
+var ORANGE="#E67E22", PURPLE="#9B59B6", PINK="#E91E63", TEAL="#008080", PEACH="#FFCBA4", FOREST="#228B22";
 var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
 var PI2=Math.PI*2;
 
 /* ---------- catalogs / economy ---------- */
 var SHAPE_KINDS = (function() { var a = ['dot','tri','sq','ring','half','cross']; for(var si=6;si<60;si++) a.push('s'+si); return a; })();
-var COLOR_LIST=[RED,BLUE,YEL,GRN,INK,WHITE];
+var COLOR_LIST=[RED,BLUE,YEL,GRN,INK,WHITE,ORANGE,PURPLE,PINK,TEAL,PEACH,FOREST];
 var NOTE={}; NOTE[RED]=329.6;NOTE[BLUE]=196.0;NOTE[YEL]=493.9;NOTE[INK]=146.8;NOTE[GRN]=293.7;NOTE[WHITE]=587.3;NOTE[GOLD]=392.0;
+NOTE[ORANGE]=220.0;NOTE[PURPLE]=246.9;NOTE[PINK]=277.2;NOTE[TEAL]=311.1;NOTE[PEACH]=622.3;NOTE[FOREST]=987.8;
 
 var MONEY_FLOOR=100;     // canvas reserve: player must always keep this
 var BLOOD_MAX=100, BLOOD_COST=5, BLOOD_REGEN=7, BLOOD_LOW=28;   // red paint = blood; empty = death
@@ -97,7 +100,8 @@ function freshState(){
     gallery:[], coins:[], glints:[],
     warn:null, taught:false, mute:false, view:'main',
     skill:0, autoDisabled:{}, galleryDisabled:false,
-    bgMix:null, bgPattern:null, unlockedPatterns:1
+    bgMix:null, bgPattern:null, unlockedPatterns:1,
+    colorsUsed:[RED], usedSecondColor:false
   };
   st.cur={stripes:[], n:0, target:5+((Math.random()*6)|0), kind:st.shapeOrder[0], flash:0, pattern:'stripes'};
   return st;
@@ -148,6 +152,7 @@ function depositCurrent(){
       chord(NOTE[BLUE]);
     }
     while(S.unlockedPatterns < 25 && S.skill >= PATTERN_THRESHOLDS[S.unlockedPatterns]){
+      if(!S.usedSecondColor) break;
       S.unlockedPatterns++;
       chord(NOTE[YEL]);
       spawnGlint(L.well.cx, L.well.cy, GOLD);
@@ -164,6 +169,12 @@ function paintDrop(hex,sx,sy,auto){
     S.money-=DROP_COST; S.paintSpend+=DROP_COST;
   }
   if(!auto) S.selColor=hex;
+  if(S.colorsUsed && S.colorsUsed.indexOf(hex) === -1){
+    S.colorsUsed.push(hex);
+    if(S.colorsUsed.length >= 2){
+      S.usedSecondColor = true;
+    }
+  }
   var st=S.cur.stripes;                                       // add a stripe to the shape being built
   if(st.length && st[st.length-1].col===hex) st[st.length-1].amt++;
   else st.push({col:hex,amt:1});
@@ -218,7 +229,7 @@ function doSell(){
   for(var k=0;k<nc;k++) S.coins.push({x:L.frame.x+Math.random()*L.frame.w, y:L.frame.y+Math.random()*L.frame.h, tx:L.hud.x+16, ty:L.hud.y+8, t:-Math.random()*0.25});
   chord(NOTE[GRN]); setTimeout(function(){chord(NOTE[YEL]*1.5);},110);
   // fresh canvas
-  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd=1.2; resetCur();
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
 }
 // Shapes unlock automatically as skill increases
@@ -288,75 +299,106 @@ function drawKindFilled(g,kind,cx,cy,r,mix,rot,pattern){
 }
 function drawArt(g,e){ var pop=e.t<1?(1-Math.pow(1-e.t,3)):1; drawKindFilled(g,e.k,e.x,e.y,e.s*pop,e.mix,e.rot,e.pattern); }
 
-/* ---------- layout ---------- */
 var L={};
 function layout(){
-  var m=Math.max(15,W*0.045), iconR=Math.max(12,W*0.034); L.icon=iconR;
-  var gutter=Math.max(30,W*0.085), left=m+gutter;               // reserve left column for the money thermometer
-  L.hud={x:left,y:m+4};
-  L.mute={cx:W-m-iconR, cy:m+iconR, r:iconR};
-  L.gallery={cx:W-m-iconR-iconR*2.7, cy:m+iconR, r:iconR};        // buy auto-sell upgrade
-  L.galleryView={cx:W-m-iconR-iconR*5.4, cy:m+iconR, r:iconR};    // open sold-paintings screen
-  var headBottom=Math.max(m+iconR*2.4, L.hud.y+76);              // clear the four HUD text lines
-  L.thermo={x:m*0.55, y:headBottom, w:gutter*0.82, h:H-headBottom-m};
-  var frameTop=headBottom;
-  L.frame={x:left,y:frameTop,w:W-m-left,h:Math.min(H*0.28,(H-frameTop)*0.42)};
-  L.well={cx:(left+W-m)/2 - iconR*1.6, cy:L.frame.y+L.frame.h+m*0.9, r:iconR*1.5};
-  L.sell={cx:L.well.cx+L.well.r+iconR*2.0, cy:L.well.cy, r:iconR*1.15};
-  var gridTop=L.well.cy+L.well.r+m*0.55, gridH=H-gridTop-m, gap=m*0.42, cg=gap*0.7, rowW=W-m-left;
-  var cbw=(rowW-cg*5)/6;
-  var autoSide=Math.min(cbw, gridH*0.22);
-  var btnSize = Math.max(12, Math.min(20, W * 0.045));
-  var btnGap = Math.max(3, m * 0.12);
+  var m = Math.max(12, W * 0.035);
+  var iconR = Math.max(10, W * 0.03);
+  L.icon = iconR;
+  var gutter = Math.max(24, W * 0.075);
+  var left = m + gutter;
+  var rowW = W - m - left;
   
-  // Left half: Shapes grid (60 slots)
-  var shapeGridW = rowW * 0.67;
-  var shapeCols = Math.floor(shapeGridW / (btnSize + btnGap)) || 1;
-  var shapeRows = Math.ceil(60 / shapeCols);
-  var shapeGridH = shapeRows * (btnSize + btnGap) - btnGap;
+  L.thermo = {x: m * 0.55, y: m, w: gutter * 0.8, h: H - 2 * m};
 
-  // Right half: Patterns grid (25 slots)
+  var yCursor = m;
+  
+  var hudH = Math.max(60, H * 0.1);
+  L.hudCard = {x: left, y: yCursor, w: rowW, h: hudH};
+  L.hud = {x: left + m * 0.8, y: yCursor + m * 0.4};
+  L.mute = {cx: W - m - iconR - m*0.4, cy: yCursor + hudH / 2, r: iconR};
+  L.gallery = {cx: L.mute.cx - iconR * 2.5, cy: L.mute.cy, r: iconR};
+  L.galleryView = {cx: L.gallery.cx - iconR * 2.5, cy: L.mute.cy, r: iconR};
+  
+  L.well = {cx: left + rowW * 0.51, cy: yCursor + hudH / 2, r: Math.min(iconR * 1.5, hudH * 0.33)};
+  L.sell = {cx: L.well.cx + L.well.r + iconR * 1.8, cy: L.well.cy, r: L.well.r * 0.85};
+  
+  yCursor += hudH + m * 0.4;
+  
+  var frameH = Math.max(90, Math.min(H * 0.32, (H - yCursor) * 0.42));
+  L.canvasCard = {x: left, y: yCursor, w: rowW, h: frameH};
+  L.frame = {x: left + 6, y: yCursor + 6, w: rowW - 12, h: frameH - 12};
+  
+  yCursor += frameH + m * 0.4;
+  
+  var cg = m * 0.25;
+  var cbw = (rowW - m * 1.2 - cg * 5) / 6;
+  var rh = Math.max(18, H * 0.038);
+  
+  var firstRowColors = [BLUE, YEL, GRN, INK, WHITE];
+  var firstRowUnlocked = true;
+  for(var fi=0; fi<firstRowColors.length; fi++){
+    if(!S.auto[firstRowColors[fi]] || S.auto[firstRowColors[fi]] < 1){
+      firstRowUnlocked = false;
+    }
+  }
+  
+  var paletteH = (rh + m * 0.4) * (firstRowUnlocked ? 2 : 1) + m * 0.4;
+  L.paletteCard = {x: left, y: yCursor, w: rowW, h: paletteH};
+  
+  L.colors = [];
+  L.autos = [];
+  var limit = firstRowUnlocked ? 12 : 6;
+  for(var i=0; i<limit; i++){
+    var gridRow = Math.floor(i / 6);
+    var colIndex = i % 6;
+    var colx = left + m * 0.6 + colIndex * (cbw + cg);
+    var yColor = yCursor + m * 0.4 + gridRow * (rh + m * 0.4);
+    L.colors.push({x: colx, y: yColor, w: cbw, h: rh, hex: COLOR_LIST[i]});
+    L.autos.push({x: colx + cbw - rh, y: yColor, w: rh, h: rh, hex: COLOR_LIST[i]});
+  }
+  
+  yCursor += paletteH + m * 0.4;
+  
+  var selectorH = H - m - yCursor;
+  L.selectorCard = {x: left, y: yCursor, w: rowW, h: selectorH};
+  
+  var titleH = 14;
+  var gridTop = yCursor + titleH + 4;
+  var gridAvailH = selectorH - titleH - 8;
+  
+  var btnSize = Math.max(10, Math.min(18, gridAvailH / 6.5));
+  var btnGap = Math.max(2, btnSize * 0.15);
+  
+  var shapeGridW = rowW * 0.64;
+  var shapeCols = Math.floor((shapeGridW - m) / (btnSize + btnGap)) || 1;
+  L.shapeCols = shapeCols;
+  
   var patGridX = left + shapeGridW + m * 0.2;
   var patGridW = rowW - shapeGridW - m * 0.2;
-  var patCols = Math.floor(patGridW / (btnSize + btnGap)) || 1;
-  var patRows = Math.ceil(25 / patCols);
-  var patGridH = patRows * (btnSize + btnGap) - btnGap;
-
-  var gridHeight = Math.max(shapeGridH, patGridH);
-  L.shapeRow = {x: left, y: gridTop, w: shapeGridW, h: gridHeight};
-  L.patternRow = {x: patGridX, y: gridTop, w: patGridW, h: gridHeight};
-
-  var remainingH = gridH - gridHeight - gap * 2;
-  var rh = Math.max(25, (remainingH - autoSide) / 2);
-
-  L.colorRow={x:left,y:gridTop+gridHeight+gap,w:rowW,h:rh};
-  var autoY=gridTop+gridHeight+gap+rh+gap;
-  L.autoRow={x:left,y:autoY,w:rowW,h:autoSide};
-
-  L.colors=[]; L.autos=[]; L.shapeSlots=[]; L.patternSlots=[];
-  for(var i=0;i<6;i++){ var colx=left+i*(cbw+cg);
-    L.colors.push({x:colx,y:L.colorRow.y,w:cbw,h:rh,hex:COLOR_LIST[i]});
-    L.autos.push({x:colx+cbw/2-autoSide/2,y:autoY,w:autoSide,h:autoSide,hex:COLOR_LIST[i]}); }
-
+  var patCols = Math.floor((patGridW - m) / (btnSize + btnGap)) || 1;
+  L.patCols = patCols;
+  
+  L.shapeSlots = [];
   for(var i=0;i<60;i++){
     var col = i % shapeCols;
     var row = Math.floor(i / shapeCols);
-    var bx = left + col * (btnSize + btnGap);
+    var bx = left + m * 0.4 + col * (btnSize + btnGap);
     var by = gridTop + row * (btnSize + btnGap);
-    L.shapeSlots.push({x:bx, y:by, w:btnSize, h:btnSize});
+    L.shapeSlots.push({x: bx, y: by, w: btnSize, h: btnSize});
   }
 
+  L.patternSlots = [];
   for(var i=0;i<25;i++){
     var col = i % patCols;
     var row = Math.floor(i / patCols);
     var bx = patGridX + col * (btnSize + btnGap);
     var by = gridTop + row * (btnSize + btnGap);
-    L.patternSlots.push({x:bx, y:by, w:btnSize, h:btnSize});
+    L.patternSlots.push({x: bx, y: by, w: btnSize, h: btnSize});
   }
-  // dedicated gallery screen: grid of sold paintings
-  var gm=m, cols=3, ggap=gm*0.6;
-  var gw=(W-2*gm-ggap*(cols-1))/cols, gh=gw*1.08;
-  L.galleryGrid={x:gm,y:m+iconR*2.2,w:W-2*gm,cols:cols,cell:gw,cellH:gh,gap:ggap};
+
+  var gm = m, cols = 3, ggap = gm * 0.6;
+  var gw = (W - 2 * gm - ggap * (cols - 1)) / cols, gh = gw * 1.08;
+  L.galleryGrid = {x: gm, y: m + iconR * 2.2, w: W - 2 * gm, cols: cols, cell: gw, cellH: gh, gap: ggap};
 }
 
 /* ---------- grain ---------- */
@@ -428,6 +470,8 @@ function hitThermoBottomLeft(x, y) {
 function cheatUnlockEverything(){
   S.unlocked = 60;
   S.unlockedPatterns = 25;
+  S.usedSecondColor = true;
+  S.colorsUsed = COLOR_LIST.slice();
   S.skill = 500;
   S.galleryOwned = true;
   for(var i=0; i<COLOR_LIST.length; i++){
@@ -589,11 +633,33 @@ var time=0;
 function txt(s,x,y,size,col,align){ ctx.fillStyle=col; ctx.font="600 "+size+"px ui-sans-serif,-apple-system,Helvetica,Arial,sans-serif"; ctx.textAlign=align||"left"; ctx.textBaseline="alphabetic"; ctx.fillText(s,x,y); }
 function contrastOn(hex){ return (hex===YEL||hex===WHITE)?INK:PAPER; }
 
+function drawCard(rect, titleLeft, titleRight){
+  ctx.fillStyle = "#F5F0E6";
+  ctx.strokeStyle = "rgba(21,18,16,0.12)";
+  ctx.lineWidth = 1.5;
+  roundRect(rect.x, rect.y, rect.w, rect.h, 6);
+  ctx.fill();
+  ctx.stroke();
+  
+  if(titleLeft){
+    txt(titleLeft, rect.x + 8, rect.y + 12, 8, "rgba(21,18,16,0.45)");
+  }
+  if(titleRight){
+    txt(titleRight, rect.x + rect.w - 8, rect.y + 12, 8, "rgba(21,18,16,0.45)", "right");
+  }
+}
+
 function draw(){
   if(TITLE){ drawTitle(); return; }
   ctx.fillStyle=PAPER; ctx.fillRect(0,0,W,H); if(grain) ctx.drawImage(grain,0,0);
   if(S.view==='gallery'){ drawGalleryScreen(); drawStamp(); return; }
   drawThermo();
+  
+  drawCard(L.hudCard);
+  drawCard(L.canvasCard);
+  drawCard(L.paletteCard);
+  drawCard(L.selectorCard);
+  
   drawComposition(); drawFlyers(); drawWell(); drawSell(); drawShapeRow(); drawPatternRow(); drawColorRow(); drawAutoRow();
   drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawMute(); drawHUD(); drawWarn();
   drawStamp();
@@ -602,20 +668,16 @@ function draw(){
 var BUILD = (function() {
   var d = new Date(document.lastModified);
   if (isNaN(d.getTime())) d = new Date();
-  var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  var h = d.getHours();
-  var ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  h = h ? h : 12;
-  var m = d.getMinutes();
-  m = m < 10 ? '0' + m : m;
-  var tz = "";
-  try {
-    var s = d.toString();
-    var match = s.match(/\(([^)]+)\)$/) || s.match(/([A-Z]{3,4})$/);
-    if (match) tz = " " + match[1];
-  } catch(e) {}
-  return months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " " + h + ":" + m + " " + ampm + tz;
+  var yr = d.getFullYear();
+  var mo = d.getMonth() + 1;
+  mo = mo < 10 ? '0' + mo : mo;
+  var dy = d.getDate();
+  dy = dy < 10 ? '0' + dy : dy;
+  var hr = d.getHours();
+  hr = hr < 10 ? '0' + hr : hr;
+  var mn = d.getMinutes();
+  mn = mn < 10 ? '0' + mn : mn;
+  return yr + "-" + mo + "-" + dy + " " + hr + ":" + mn;
 })();
 function skull(cx,cy,r,col,hole){
   ctx.fillStyle=col;
@@ -655,7 +717,6 @@ function drawTitleWord(decor,n,cy){
 }
 function drawTitle(){
   ctx.fillStyle=PAPER; ctx.fillRect(0,0,W,H); if(grain) ctx.drawImage(grain,0,0);
-  // a few stray shapes for flavour
   drawTitleWord(TITLE_L1,6,H*0.34);
   drawTitleWord(TITLE_L2,3,H*0.60);
   ctx.globalAlpha=(!REDUCED)?(0.4+Math.sin(time*3)*0.35):0.6;
@@ -693,15 +754,19 @@ function drawAutoRow(){
   for(var i=0;i<L.autos.length;i++){ var b=L.autos[i], hex=b.hex, lvl=S.auto[hex]||0, cx=b.x+b.w/2, cy=b.y+b.h/2;
     var afford=canSpend(autoCost(hex));
     var disabled=S.autoDisabled && S.autoDisabled[hex];
-    // tile: colour chip backing + brush
-    ctx.fillStyle= (lvl>0 && !disabled) ? "#F1EBDC" : "rgba(21,18,16,0.03)"; ctx.fillRect(b.x,b.y,b.w,b.h);
-    ctx.fillStyle=hex; ctx.globalAlpha=(lvl>0 && !disabled)?0.9:0.45; ctx.fillRect(b.x,b.y,b.w*0.22,b.h); ctx.globalAlpha=1; // colour spine
-    ctx.strokeStyle= (lvl>0 && !disabled)?INK:"rgba(21,18,16,0.3)"; ctx.lineWidth=Math.max(2,W*0.005);
-    if(lvl<=0 || disabled){ ctx.setLineDash([6,5]); } ctx.strokeRect(b.x+1,b.y+1,b.w-2,b.h-2); ctx.setLineDash([]);
-    var br=Math.min(b.w,b.h)*0.26;
-    brushIcon(cx+b.w*0.06, cy-b.h*0.06, br, (lvl>0 && !disabled)?GRN:INK);
-    costRing(cx+b.w*0.06, cy-b.h*0.06, br*1.5, (S.money-MONEY_FLOOR)/autoCost(hex));
-    if(lvl>0) txt("x"+lvl, b.x+b.w-4, b.y+b.h-4, Math.max(9,b.h*0.22), disabled?"rgba(21,18,16,0.4)":INK, "right");
+    ctx.fillStyle = (lvl>0 && !disabled) ? "rgba(255,255,255,0.22)" : "rgba(21,18,16,0.04)";
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = "rgba(21,18,16,0.18)";
+    ctx.lineWidth = 1;
+    if(lvl<=0 || disabled){ ctx.setLineDash([3,2]); }
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.setLineDash([]);
+    var br = Math.min(b.w, b.h) * 0.28;
+    brushIcon(cx, cy, br, (lvl>0 && !disabled) ? GRN : INK);
+    costRing(cx, cy, br * 1.5, (S.money-MONEY_FLOOR)/autoCost(hex));
+    if(lvl>0){
+      txt("x"+lvl, b.x+b.w-2, b.y+b.h-2, Math.max(8, b.h*0.3), disabled ? "rgba(21,18,16,0.4)" : INK, "right");
+    }
   }
 }
 function drawDeath(){
@@ -709,16 +774,14 @@ function drawDeath(){
   ctx.fillStyle="rgba(122,14,10,"+a+")"; ctx.fillRect(0,0,W,H);
   var r=Math.min(W,H)*0.14, cy=H*0.40;
   skull(W/2,cy,r,"#F2ECDF","#3A0806");
-  if(S.deadT>0.6 && (!REDUCED? (Math.sin(time*3)>-0.3):true)) txt("tap", W/2, cy+r*1.75, 16, "rgba(255,255,255,0.85)", "center");
+  if(S.deadT>0.6 && (!REDUCED? (Math.sin(time*3)>-0.3):true)) txt("↺", W/2, cy+r*1.75, 24, "rgba(255,255,255,0.85)", "center");
 }
 
 function drawHUD(){
   var x=L.hud.x, y=L.hud.y;
-  txt("$"+Math.floor(S.money), x, y+15, 15, INK);
-  txt("art mult "+S.artMult.toFixed(1)+"x", x, y+33, 11, INK);
-  txt("fame mult "+fameMult().toFixed(1)+"x", x, y+48, 11, GOLD);
-  txt("skill "+(S.skill || 0), x, y+63, 11, INK);
-  txt("shapes "+S.unlocked+"/60  patterns "+(S.unlockedPatterns || 1)+"/25", x, y+76, 9.5, INK);
+  txt("$"+Math.floor(S.money), x, y+14, 14, INK);
+  txt("art economy "+S.artMult.toFixed(1)+"x", x, y+28, 9.5, INK);
+  txt("fame multiplier "+fameMult().toFixed(1)+"x", x, y+40, 9.5, GOLD);
 }
 
 function frameStackIcon(cx,cy,r,col){
@@ -1100,6 +1163,25 @@ function costRing(cx,cy,r,prog){ prog=Math.max(0,Math.min(1,prog)); var aff=prog
 /* icons */
 function bloodDrop(cx,cy,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(cx,cy-r);
   ctx.bezierCurveTo(cx+r*0.95,cy-r*0.1,cx+r*0.7,cy+r,cx,cy+r); ctx.bezierCurveTo(cx-r*0.7,cy+r,cx-r*0.95,cy-r*0.1,cx,cy-r); ctx.closePath(); ctx.fill(); }
+function paintBucket(cx,cy,r,col){
+  ctx.save();
+  ctx.fillStyle = col;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = Math.max(1.5, r * 0.15);
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.55, cy - r * 0.15);
+  ctx.lineTo(cx + r * 0.55, cy - r * 0.15);
+  ctx.lineTo(cx + r * 0.4, cy + r * 0.7);
+  ctx.lineTo(cx - r * 0.4, cy + r * 0.7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy - r * 0.1, r * 0.5, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillRect(cx - r * 0.65, cy - r * 0.28, r * 1.3, r * 0.15);
+  ctx.restore();
+}
 function moneyBag(cx,cy,r,col){ ctx.fillStyle=col;
   ctx.beginPath(); ctx.arc(cx,cy+r*0.2,r*0.78,0,PI2); ctx.fill();
   ctx.beginPath(); ctx.moveTo(cx-r*0.45,cy-r*0.55); ctx.lineTo(cx+r*0.45,cy-r*0.55); ctx.lineTo(cx+r*0.28,cy-r*0.12); ctx.lineTo(cx-r*0.28,cy-r*0.12); ctx.closePath(); ctx.fill();
@@ -1211,21 +1293,21 @@ function drawColorRow(){
   for(var i=0;i<L.colors.length;i++){ var b=L.colors[i], hex=b.hex, free=(hex===RED);
     var afford = free || canSpend(DROP_COST);
     ctx.globalAlpha=afford?1:0.35;
-    var ic=Math.min(b.w,b.h)*0.28, cx=b.x+b.w/2, cy=b.y+b.h/2;
+    var selectW = b.w - b.h;
+    var ic=Math.min(selectW, b.h)*0.28, cx=b.x+selectW/2, cy=b.y+b.h/2;
     if(free){
-      // the whole button is the blood reservoir: a big red bar that drains from the top down
-      ctx.fillStyle="#4A0E0A"; ctx.fillRect(b.x,b.y,b.w,b.h);
+      ctx.fillStyle="#4A0E0A"; ctx.fillRect(b.x,b.y,selectW,b.h);
       var bf=Math.max(0,Math.min(1,S.blood/BLOOD_MAX)), fh=b.h*bf;
-      ctx.fillStyle=RED; ctx.fillRect(b.x, b.y+b.h-fh, b.w, fh);
-      if(S.blood<BLOOD_LOW && !REDUCED){ ctx.save(); ctx.globalAlpha=(afford?1:0.35)*(0.4+Math.sin(time*8)*0.4); ctx.fillStyle="#FFF"; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.restore(); }
-      ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,W*0.005); ctx.strokeRect(b.x+1,b.y+1,b.w-2,b.h-2);
-      bloodDrop(cx,cy,ic,PAPER);                       // static drop label in front of the bar
+      ctx.fillStyle=RED; ctx.fillRect(b.x, b.y+b.h-fh, selectW, fh);
+      if(S.blood<BLOOD_LOW && !REDUCED){ ctx.save(); ctx.globalAlpha=(afford?1:0.35)*(0.4+Math.sin(time*8)*0.4); ctx.fillStyle="#FFF"; ctx.fillRect(b.x,b.y,selectW,b.h); ctx.restore(); }
+      ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,W*0.005); ctx.strokeRect(b.x+1,b.y+1,selectW-2,b.h-2);
+      bloodDrop(cx,cy,ic,PAPER);
     } else {
       ctx.fillStyle=hex; ctx.fillRect(b.x,b.y,b.w,b.h);
       ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,W*0.005); ctx.strokeRect(b.x+1,b.y+1,b.w-2,b.h-2);
-      moneyBag(cx,cy,ic,contrastOn(hex));
+      paintBucket(cx,cy,ic,contrastOn(hex));
     }
-    if(S.selColor===hex){ ctx.strokeStyle=(hex===WHITE||hex===YEL)?INK:"#fff"; ctx.lineWidth=Math.max(3,W*0.008); ctx.strokeRect(b.x+3,b.y+3,b.w-6,b.h-6); }
+    if(S.selColor===hex && hex !== RED){ ctx.strokeStyle=(hex===WHITE||hex===YEL)?INK:"#fff"; ctx.lineWidth=Math.max(3,W*0.008); ctx.strokeRect(b.x+3,b.y+3,selectW-6,b.h-6); }
     ctx.globalAlpha=1;
   }
 }

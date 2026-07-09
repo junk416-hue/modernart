@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 630 500" width="630" height="500">
+  <!-- Background -->
+  <rect width="630" height="500" fill="#EDE6D6"/>
+  
+  <!-- Subtle background noise/grid -->
+  <g opacity="0.05">
+    <line x1="0" y1="50" x2="630" y2="50" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="100" x2="630" y2="100" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="150" x2="630" y2="150" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="200" x2="630" y2="200" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="250" x2="630" y2="250" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="300" x2="630" y2="300" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="350" x2="630" y2="350" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="400" x2="630" y2="400" stroke="#151210" stroke-width="2"/>
+    <line x1="0" y1="450" x2="630" y2="450" stroke="#151210" stroke-width="2"/>
+    <line x1="50" y1="0" x2="50" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="100" y1="0" x2="100" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="150" y1="0" x2="150" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="200" y1="0" x2="200" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="250" y1="0" x2="250" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="300" y1="0" x2="300" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="350" y1="0" x2="350" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="400" y1="0" x2="400" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="450" y1="0" x2="450" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="500" y1="0" x2="500" y2="500" stroke="#151210" stroke-width="2"/>
+    <line x1="550" y1="0" x2="550" y2="500" stroke="#151210" stroke-width="2"/>
+  </g>
+
+  <!-- Left: The Art Frame -->
+  <g transform="translate(40, 60)">
+    <!-- Canvas frame shadow -->
+    <rect x="8" y="8" width="220" height="220" rx="10" fill="#151210" opacity="0.15"/>
+    <!-- Outer frame -->
+    <rect x="0" y="0" width="220" height="220" rx="10" fill="#F6F1E6" stroke="#151210" stroke-width="8"/>
+    <!-- Inside content -->
+    <!-- Pattern background inside frame -->
+    <g opacity="0.12">
+      <circle cx="110" cy="110" r="95" fill="none" stroke="#151210" stroke-width="12"/>
+      <circle cx="110" cy="110" r="70" fill="none" stroke="#151210" stroke-width="12"/>
+      <circle cx="110" cy="110" r="45" fill="none" stroke="#151210" stroke-width="12"/>
+    </g>
+    <!-- Pointy procedural shapes -->
+    <!-- Yellow spiky shape -->
+    <path d="M110 50 L118 90 L158 98 L118 106 L110 146 L102 106 L62 98 L102 90 Z" fill="#F1C40F" stroke="#151210" stroke-width="3" stroke-linejoin="round"/>
+    <!-- Green spiky shape layered -->
+    <path d="M140 100 L146 128 L174 134 L146 140 L140 168 L134 140 L106 134 L134 128 Z" fill="#1E9E5A" stroke="#151210" stroke-width="3" stroke-linejoin="round"/>
+    <!-- Teardrop drop of blood dripping from the frame corner -->
+    <path d="M185 185 Q185 197 191 197 Q197 197 197 185 Q197 175 191 165 Q185 175 185 185 Z" fill="#DE342B"/>
+  </g>
+
+  <!-- Title & Text -->
+  <!-- Main Title -->
+  <text x="300" y="200" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="800" font-size="62" fill="#151210" letter-spacing="4">AUTOMAT</text>
+  <!-- Subtitle -->
+  <text x="304" y="240" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="600" font-size="20" fill="#1E9E5A" letter-spacing="1">MODERN ART SIMULATOR</text>
+  <!-- Description -->
+  <text x="304" y="278" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="500" font-size="14" fill="#151210" opacity="0.6">Unlock 60 spiky shapes &amp; 25 canvas patterns.</text>
+  <text x="304" y="301" font-family="ui-sans-serif, system-ui, sans-serif" font-weight="500" font-size="14" fill="#151210" opacity="0.6">Buy auto-painters. Sell art. Keep the blood pumping.</text>
+
+  <!-- Bottom: Some decorative details (stray shapes / coins) -->
+  <!-- Gold coin -->
+  <circle cx="85" cy="405" r="14" fill="#CE9A2C" stroke="#151210" stroke-width="3"/>
+  <text x="85" y="410" font-family="sans-serif" font-weight="700" font-size="14" fill="#EDE6D6" text-anchor="middle">$</text>
+  
+  <circle cx="120" cy="420" r="14" fill="#CE9A2C" stroke="#151210" stroke-width="3"/>
+  <text x="120" y="425" font-family="sans-serif" font-weight="700" font-size="14" fill="#EDE6D6" text-anchor="middle">$</text>
+
+  <!-- A small spiky star at the bottom right corner -->
+  <path d="M540 400 L544 416 L560 420 L544 424 L540 440 L536 424 L520 420 L536 416 Z" fill="#2049C0" stroke="#151210" stroke-width="3" stroke-linejoin="round"/>
+</svg>
