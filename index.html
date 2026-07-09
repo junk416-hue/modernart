@@ -147,6 +147,8 @@ function loadGame(){
   return st;
 }
 var clearArm=0;   // seconds left in the "tap again to confirm" window on the trash button
+var saveDirty=false, saveClock=0;   // coalesce frequent saves (auto-sell can fire several times a second)
+function requestSave(){ saveDirty=true; }
 function clearSave(armed){
   if(armed){ clearArm=0; try{ localStorage.removeItem(SAVE_KEY); }catch(e){} S=freshState(); tone(140,0.3,"sawtooth",0.5); }
   else { clearArm=3; tone(200,0.14,"square",0.4); }          // first tap only arms it
@@ -278,7 +280,7 @@ function doSell(){
   // fresh canvas
   S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
-  saveGame();                                                  // autosave after each sale
+  requestSave();                                               // autosave after each sale (coalesced, see update)
 }
 // Shapes unlock automatically as skill increases
 function buyGallery(){ if(S.galleryOwned) return;
@@ -545,8 +547,6 @@ function cheatUnlockEverything(){
   S.autoPickShapeEnabled = true;
   S.autoPickPattern = true;
   S.autoPickPatternEnabled = true;
-  S.usedSecondColor = true;
-  S.colorsUsed = COLOR_LIST.slice();
   S.skill = 500;
   S.galleryOwned = true;
   for(var i=0; i<COLOR_LIST.length; i++){
@@ -702,6 +702,7 @@ document.addEventListener("dblclick",function(e){e.preventDefault();});
 /* ---------- update ---------- */
 function update(dt){
   if(clearArm>0){ clearArm-=dt; if(clearArm<0) clearArm=0; }   // auto-cancel the delete confirm
+  saveClock+=dt; if(saveDirty && saveClock>=2){ saveClock=0; saveDirty=false; saveGame(); }   // flush a pending save
   if(TITLE) return;
   if(S.dead){ S.deadT+=dt; return; }
   // blood slowly replenishes
@@ -1591,8 +1592,9 @@ function frame(ts){ var dt=Math.min(0.05,(ts-last)/1000||0); last=ts; time+=dt; 
 /* ---------- boot ---------- */
 S=loadGame()||freshState(); resize(); requestAnimationFrame(frame);
 // also flush a save when the tab is hidden or closed, so nothing is lost between ticks
-window.addEventListener('pagehide', function(){ if(!TITLE) saveGame(); });
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden' && !TITLE) saveGame(); });
+function flushSave(){ if(!TITLE){ saveDirty=false; saveClock=0; saveGame(); } }
+window.addEventListener('pagehide', flushSave);
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') flushSave(); });
 })();
 </script>
 </body>
