@@ -233,30 +233,45 @@ function paintDrop(hex,sx,sy,auto){
   S.taught=true;
   if(S.cur.n>=S.cur.target) depositCurrent();                 // 5-10 drops complete a striped shape
 }
-function doSell(){
-  if(!sellable()) return;
-  // thumbnail
-  var tw=140, th=Math.round(tw*L.frame.h/L.frame.w);
+// A painting is fully described by its frame (coordinate space), background,
+// and shape entries. Snapshotting that (instead of a fixed-size raster) lets us
+// re-render it crisply at any size later — for the enlarged view and downloads.
+function snapshotPainting(){
+  var f=L.frame;
+  return {
+    frame:{x:f.x, y:f.y, w:f.w, h:f.h},
+    bgMix: S.bgMix ? S.bgMix.map(function(b){ return {col:b.col, share:b.share}; }) : null,
+    bgPattern: S.bgPattern,
+    art: S.art.map(function(e){
+      return {k:e.k, x:e.x, y:e.y, s:e.s, rot:e.rot, t:1, pattern:e.pattern, border:e.border,
+              mix:e.mix.map(function(m){ return {col:m.col, share:m.share}; })};
+    })
+  };
+}
+function renderPainting(shot, targetW){
+  var f=shot.frame, tw=Math.round(targetW), th=Math.round(tw*f.h/f.w);
   var oc=document.createElement("canvas"); oc.width=tw; oc.height=th;
-  var g=oc.getContext("2d");
-  if(S.bgMix && S.bgMix.length > 0){
-    var sx=tw/L.frame.w, sy=th/L.frame.h;
-    g.save(); g.scale(sx,sy); g.translate(-L.frame.x,-L.frame.y);
-    var f=L.frame;
+  var g=oc.getContext("2d"), sx=tw/f.w, sy=th/f.h, i;
+  if(shot.bgMix && shot.bgMix.length>0){
+    g.save(); g.scale(sx,sy); g.translate(-f.x,-f.y);
     g.save(); g.beginPath(); g.rect(f.x,f.y,f.w,f.h); g.clip();
     var cx=f.x+f.w/2, cy=f.y+f.h/2, r=Math.max(f.w,f.h)*0.9;
-    bandFill(g,cx,cy,r,S.bgMix,1.0,S.bgPattern);
+    bandFill(g,cx,cy,r,shot.bgMix,1.0,shot.bgPattern);
     g.restore();
-    for(var i=0;i<S.art.length;i++){ var e=S.art[i]; var tt=e.t; e.t=1; drawArt(g,e); e.t=tt; }
+    for(i=0;i<shot.art.length;i++) drawArt(g,shot.art[i]);
     g.restore();
   } else {
     g.fillStyle="#F6F1E6"; g.fillRect(0,0,tw,th);
-    var sx=tw/L.frame.w, sy=th/L.frame.h;
-    g.save(); g.scale(sx,sy); g.translate(-L.frame.x,-L.frame.y);
-    for(var i=0;i<S.art.length;i++){ var e=S.art[i]; var tt=e.t; e.t=1; drawArt(g,e); e.t=tt; }
+    g.save(); g.scale(sx,sy); g.translate(-f.x,-f.y);
+    for(i=0;i<shot.art.length;i++) drawArt(g,shot.art[i]);
     g.restore();
   }
-  var img=new Image(); img.src=oc.toDataURL();
+  return oc;
+}
+function doSell(){
+  if(!sellable()) return;
+  var shot=snapshotPainting();
+  var img=new Image(); img.src=renderPainting(shot,140).toDataURL();   // small raster for the grid
   var v=Math.max(1,variety());
   var price=BASE_SALE*(1+0.5*(v-1))*S.artMult*fameMult()*(0.9+Math.random()*0.2);
   var pips=Math.max(1,Math.min(9,Math.round(price/6)));
@@ -264,7 +279,7 @@ function doSell(){
   // less effort (cheaper paint) => more fame
   var fg = S.paintSpend<=0?3 : (S.paintSpend<=6?2:1);
   S.money+=price; S.fame+=fg;
-  S.gallery.push({img:img,val:pips}); if(S.gallery.length>60) S.gallery.shift();
+  S.gallery.push({img:img,val:pips,shot:shot}); if(S.gallery.length>60) S.gallery.shift();
   for(var k=0;k<nc;k++) S.coins.push({x:L.frame.x+Math.random()*L.frame.w, y:L.frame.y+Math.random()*L.frame.h, tx:L.hud.x+16, ty:L.hud.y+8, t:-Math.random()*0.25});
   chord(NOTE[GRN]); setTimeout(function(){chord(NOTE[YEL]*1.5);},110);
   // fresh canvas
@@ -491,7 +506,7 @@ function onDown(x,y){
       zoomIdx=-1; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return;
     }
     var gi=galleryHit(x,y);
-    if(gi>=0){ zoomIdx=gi; tone(NOTE[YEL]*1.2,0.12,"sine",0.35); return; }   // tap a painting to enlarge
+    if(gi>=0){ zoomIdx=gi; ensureBig(S.gallery[gi]); tone(NOTE[YEL]*1.2,0.12,"sine",0.35); return; }   // tap a painting to enlarge
     S.view='main'; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return;            // tap elsewhere leaves the gallery
   }
   var trashWasArmed = clearArm>0; clearArm=0;                 // any deliberate tap cancels a pending delete
@@ -952,11 +967,19 @@ function galleryHit(x,y){
   }
   return -1;
 }
+function ensureBig(e){                        // lazily render a crisp raster for the enlarged view
+  if(!e || e.big || !e.shot) return;
+  try{ var im=new Image(); im.src=renderPainting(e.shot,900).toDataURL(); e.big=im; }catch(err){ e.big=null; }
+}
 function downloadImage(e){
-  if(!e || !e.img || !e.img.src) return;
+  if(!e) return;
+  var src=null;
+  if(e.shot){ try{ src=renderPainting(e.shot,1200).toDataURL('image/png'); }catch(err){} }   // full-size re-render
+  if(!src && e.img) src=e.img.src;                                                            // fall back to the thumbnail
+  if(!src) return;
   try{
     var a=document.createElement('a');
-    a.href=e.img.src; a.download='automat-painting.png';
+    a.href=src; a.download='automat-painting.png';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     tone(NOTE[GRN],0.16,"sine",0.4);
   }catch(err){}
@@ -982,10 +1005,10 @@ function drawGalleryScreen(){
 }
 function drawGalleryZoom(){
   var e=S.gallery[zoomIdx]; if(!e){ zoomIdx=-1; return; }
-  var img=e.img;
+  var img=(e.big&&e.big.complete)?e.big:e.img;                  // crisp re-render once ready, thumbnail meanwhile
   ctx.fillStyle="rgba(21,18,16,0.62)"; ctx.fillRect(0,0,W,H);   // dim the grid behind
   // fit the painting into the upper area, preserving aspect
-  var aspect=(img.naturalWidth&&img.naturalHeight)?img.naturalWidth/img.naturalHeight:(L.frame.w/L.frame.h);
+  var aspect=(e.shot?e.shot.frame.w/e.shot.frame.h:(img.naturalWidth&&img.naturalHeight)?img.naturalWidth/img.naturalHeight:(L.frame.w/L.frame.h));
   var maxW=W*0.86, maxH=H*0.56, iw=maxW, ih=iw/aspect;
   if(ih>maxH){ ih=maxH; iw=ih*aspect; }
   var ix=(W-iw)/2, iy=Math.max(m0()+L.icon*2, H*0.13);
