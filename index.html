@@ -656,24 +656,23 @@ cv.addEventListener("pointerdown", function(e){
 
 cv.addEventListener("pointerup", function(e){
   e.preventDefault();
-  if(pressTimer){
-    clearTimeout(pressTimer);
-    pressTimer = null;
-    if(!longPressed && pressTarget){
-      if(pressTarget.type === 'auto'){
-        buyAutoColor(pressTarget.hex, pressTarget.x+pressTarget.w/2, pressTarget.y+pressTarget.h/2);
-      } else if(pressTarget.type === 'gallery'){
-        buyGallery();
-      } else if(pressTarget.type === 'shapePick' && pressTarget.buy){
-        if(canSpend(150)){ S.money-=150; S.autoPickShape=true; S.autoPickShapeEnabled=true; chord(NOTE[GOLD]); }
-        else warn(pressTarget.x, pressTarget.y);
-      } else if(pressTarget.type === 'patPick' && pressTarget.buy){
-        if(canSpend(150)){ S.money-=150; S.autoPickPattern=true; S.autoPickPatternEnabled=true; chord(NOTE[GOLD]); }
-        else warn(pressTarget.x, pressTarget.y);
-      }
+  if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
+  // Act on a short tap. Buy taps (shapePick/patPick) never arm a pressTimer,
+  // so this must not be gated on pressTimer or those purchases never fire.
+  if(!longPressed && pressTarget){
+    if(pressTarget.type === 'auto'){
+      buyAutoColor(pressTarget.hex, pressTarget.x+pressTarget.w/2, pressTarget.y+pressTarget.h/2);
+    } else if(pressTarget.type === 'gallery'){
+      buyGallery();
+    } else if(pressTarget.type === 'shapePick' && pressTarget.buy){
+      if(canSpend(150)){ S.money-=150; S.autoPickShape=true; S.autoPickShapeEnabled=true; chord(NOTE[GOLD]); }
+      else warn(pressTarget.x, pressTarget.y);
+    } else if(pressTarget.type === 'patPick' && pressTarget.buy){
+      if(canSpend(150)){ S.money-=150; S.autoPickPattern=true; S.autoPickPatternEnabled=true; chord(NOTE[GOLD]); }
+      else warn(pressTarget.x, pressTarget.y);
     }
-    pressTarget = null;
   }
+  pressTarget = null;
 },{passive:false});
 
 cv.addEventListener("pointermove", function(e){
