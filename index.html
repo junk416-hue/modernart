@@ -146,6 +146,7 @@ function loadGame(){
   } }
   return st;
 }
+function clearSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} S=freshState(); tone(140,0.25,"sawtooth",0.4); }
 
 /* ---------- derived ---------- */
 function fameMult(){ return 1 + S.fame*0.3; }
@@ -273,6 +274,7 @@ function doSell(){
   // fresh canvas
   S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
+  saveGame();                                                  // autosave after each sale
 }
 // Shapes unlock automatically as skill increases
 function buyGallery(){ if(S.galleryOwned) return;
@@ -373,6 +375,7 @@ function layout(){
   L.mute = {cx: W - m - iconR - m*0.4, cy: yCursor + hudH / 2, r: iconR};
   L.gallery = {cx: L.mute.cx - iconR * 2.5, cy: L.mute.cy, r: iconR};
   L.galleryView = {cx: L.gallery.cx - iconR * 2.5, cy: L.mute.cy, r: iconR};
+  L.clear = {cx: L.galleryView.cx - iconR * 2.5, cy: L.mute.cy, r: iconR};
   
   L.well = {cx: left + rowW * 0.51, cy: yCursor + hudH / 2, r: Math.min(iconR * 1.5, hudH * 0.33)};
   L.sell = {cx: L.well.cx + L.well.r + iconR * 1.8, cy: L.well.cy, r: L.well.r * 0.85};
@@ -487,6 +490,7 @@ function onDown(x,y){
   if(hitCircle(x,y,L.mute.cx,L.mute.cy,L.mute.r*1.3)){ S.mute=!S.mute; if(!S.mute) tone(NOTE[GRN],0.16,"sine",0.4); return; }
   if(hitCircle(x,y,L.gallery.cx,L.gallery.cy,L.gallery.r*1.3)){ buyGallery(); return; }
   if(hitCircle(x,y,L.galleryView.cx,L.galleryView.cy,L.galleryView.r*1.3)){ S.view='gallery'; tone(NOTE[INK]*1.2,0.12,"sine",0.35); return; }
+  if(hitCircle(x,y,L.clear.cx,L.clear.cy,L.clear.r*1.3)){ clearSave(); return; }
   if(sellable() && hitCircle(x,y,L.sell.cx,L.sell.cy,L.sell.r*1.3)){ doSell(); return; }
   // per-colour auto-painters (buy) — checked first since the icon overlaps the swatch's rect
   for(var k=0;k<L.autos.length;k++){ var ab=L.autos[k]; if(hitRect(x,y,ab)){ buyAutoColor(ab.hex,ab.x+ab.w/2,ab.y+ab.h/2); return; } }
@@ -757,7 +761,7 @@ function draw(){
   drawCard(L.selectorCard);
   
   drawComposition(); drawFlyers(); drawWell(); drawSell(); drawShapeRow(); drawPatternRow(); drawColorRow(); drawAutoRow();
-  drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawMute(); drawHUD(); drawAutoPicks(); drawWarn();
+  drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawClear(); drawMute(); drawHUD(); drawAutoPicks(); drawWarn();
   drawStamp();
   if(S.dead) drawDeath();
 }
@@ -1552,6 +1556,12 @@ function drawGallery(){
   if(!owned) costRing(g.cx,g.cy,g.r*1.25, (S.money-MONEY_FLOOR)/GALLERY_COST);
   else if(!disabled && !REDUCED){ ctx.strokeStyle=GRN; ctx.globalAlpha=0.4+Math.sin(time*3)*0.3; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(g.cx,g.cy,g.r*1.25,0,PI2); ctx.stroke(); ctx.globalAlpha=1; }
 }
+function drawClear(){ var b=L.clear, r=b.r; ctx.save(); ctx.translate(b.cx,b.cy); ctx.strokeStyle=INK; ctx.lineWidth=2; ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(-r*0.6,-r*0.42); ctx.lineTo(r*0.6,-r*0.42); ctx.stroke();                              // lid
+  ctx.beginPath(); ctx.moveTo(-r*0.22,-r*0.42); ctx.lineTo(-r*0.16,-r*0.66); ctx.lineTo(r*0.16,-r*0.66); ctx.lineTo(r*0.22,-r*0.42); ctx.stroke();  // handle
+  ctx.beginPath(); ctx.moveTo(-r*0.46,-r*0.42); ctx.lineTo(-r*0.36,r*0.6); ctx.lineTo(r*0.36,r*0.6); ctx.lineTo(r*0.46,-r*0.42); ctx.stroke();      // can
+  ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(-r*0.16,-r*0.24); ctx.lineTo(-r*0.12,r*0.42); ctx.moveTo(0,-r*0.24); ctx.lineTo(0,r*0.42); ctx.moveTo(r*0.16,-r*0.24); ctx.lineTo(r*0.12,r*0.42); ctx.stroke();  // ribs
+  ctx.restore(); }
 function drawMute(){ var m=L.mute; ctx.strokeStyle=INK; ctx.fillStyle=INK; ctx.lineWidth=2; ctx.save(); ctx.translate(m.cx,m.cy);
   ctx.beginPath(); ctx.moveTo(-m.r*0.5,-m.r*0.22); ctx.lineTo(-m.r*0.15,-m.r*0.22); ctx.lineTo(m.r*0.2,-m.r*0.5); ctx.lineTo(m.r*0.2,m.r*0.5); ctx.lineTo(-m.r*0.15,m.r*0.22); ctx.lineTo(-m.r*0.5,m.r*0.22); ctx.closePath(); ctx.fill();
   if(S.mute){ ctx.strokeStyle=RED; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(-m.r*0.7,-m.r*0.7); ctx.lineTo(m.r*0.7,m.r*0.7); ctx.stroke(); }
@@ -1562,10 +1572,8 @@ function drawWarn(){ if(!S.warn) return; var w=S.warn, r=14+w.t*16, a=1-w.t;
   ctx.beginPath(); ctx.moveTo(w.x-r*0.6,w.y-r*0.6); ctx.lineTo(w.x+r*0.6,w.y+r*0.6); ctx.stroke(); ctx.globalAlpha=1; }
 
 /* ---------- loop ---------- */
-var last=0, saveAcc=0;
-function frame(ts){ var dt=Math.min(0.05,(ts-last)/1000||0); last=ts; time+=dt; update(dt); draw();
-  if(!TITLE){ saveAcc+=dt; if(saveAcc>=5){ saveAcc=0; saveGame(); } }   // autosave every 5s of play
-  requestAnimationFrame(frame); }
+var last=0;
+function frame(ts){ var dt=Math.min(0.05,(ts-last)/1000||0); last=ts; time+=dt; update(dt); draw(); requestAnimationFrame(frame); }
 
 /* ---------- boot ---------- */
 S=loadGame()||freshState(); resize(); requestAnimationFrame(frame);
