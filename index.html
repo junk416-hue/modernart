@@ -115,23 +115,16 @@ function freshState(){
 
 /* ---------- persistence ---------- */
 var SAVE_KEY='modernart.save.v1';
-// Everything in S is plain JSON data except gallery[].img, which is an <img>
-// element; we store its data-URL src instead and rebuild the image on load.
-function serializeState(withThumbs){
+// The gallery (sold-painting thumbnails) is deliberately NOT persisted: its
+// <img> data-URLs are heavy and it's just a cosmetic history. Everything else
+// in S is plain JSON data.
+function serializeState(){
   var snap={};
   for(var k in S){ if(k==='gallery'||k==='__proto__') continue; snap[k]=S[k]; }
-  snap.gallery=S.gallery.map(function(e){
-    return withThumbs ? {src:(e.img&&e.img.src)||'', val:e.val} : {val:e.val};
-  });
   return snap;
 }
 function saveGame(){
-  try{
-    localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(true)));
-  }catch(err){
-    // typically a quota error from the gallery thumbnails — keep progress, drop the images
-    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState(false))); }catch(e2){}
-  }
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(serializeState())); }catch(e){}
 }
 function loadGame(){
   var raw; try{ raw=localStorage.getItem(SAVE_KEY); }catch(e){ return null; }
@@ -140,10 +133,7 @@ function loadGame(){
   if(!data || typeof data.money!=='number') return null;
   var st=freshState();                       // defaults, so fields added since the save still exist
   for(var k in data){ if(k==='gallery'||k==='__proto__') continue; st[k]=data[k]; }
-  st.gallery=[];
-  if(data.gallery){ for(var i=0;i<data.gallery.length;i++){ var e=data.gallery[i];
-    if(e&&e.src){ var img=new Image(); img.src=e.src; st.gallery.push({img:img,val:e.val}); }
-  } }
+  st.gallery=[];                             // gallery always starts empty (never saved)
   return st;
 }
 var clearArm=0;   // seconds left in the "tap again to confirm" window on the trash button
