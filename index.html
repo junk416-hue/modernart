@@ -28,7 +28,7 @@ var REDUCED = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)"
 var PI2=Math.PI*2;
 
 /* ---------- catalogs / economy ---------- */
-var SHAPE_KINDS = (function() { var a = ['dot','tri','sq','ring','half','cross']; for(var si=6;si<60;si++) a.push('s'+si); return a; })();
+var SHAPE_KINDS = (function() { var a = ['dot','tri','sq','ring','half','cross']; for(var si=6;si<90;si++) a.push('s'+si); return a; })();
 var COLOR_LIST=[RED,BLUE,YEL,GRN,INK,WHITE,ORANGE,PURPLE,PINK,TEAL,PEACH,FOREST];
 var NOTE={}; NOTE[RED]=329.6;NOTE[BLUE]=196.0;NOTE[YEL]=493.9;NOTE[INK]=146.8;NOTE[GRN]=293.7;NOTE[WHITE]=587.3;NOTE[GOLD]=392.0;
 NOTE[ORANGE]=220.0;NOTE[PURPLE]=246.9;NOTE[PINK]=277.2;NOTE[TEAL]=311.1;NOTE[PEACH]=622.3;NOTE[FOREST]=987.8;
@@ -42,16 +42,20 @@ var GALLERY_COST=500;    // auto-sell upgrade
 var BASE_SALE=8;
 var SHAPE_THRESHOLDS = (function() {
   var a = [0];
-  for (var i = 1; i < 60; i++) {
+  for (var i = 1; i < 90; i++) {
     a.push(a[i - 1] + 1 + Math.floor(i / 15));
   }
   return a;
 })();
 
-var PATTERNS = ['stripes', 'circles', 'wavy', 'vertical', 'grid', 'checkered', 'dots', 'radial', 'zigzag', 'trans_stripes', 'trans_circles', 'trans_wavy', 'trans_dots', 'trans_radial', 'trans_vertical', 'grad_linear', 'grad_radial', 'grad_conic', 'grad_stripes', 'grad_waves', 'grad_rings', 'grad_vertical', 'grad_diagonal', 'grad_glow', 'grad_rainbow'];
+var PATTERNS = (function() {
+  var a = ['stripes', 'circles', 'wavy', 'vertical', 'grid', 'checkered', 'dots', 'radial', 'zigzag', 'trans_stripes', 'trans_circles', 'trans_wavy', 'trans_dots', 'trans_radial', 'trans_vertical', 'grad_linear', 'grad_radial', 'grad_conic', 'grad_stripes', 'grad_waves', 'grad_rings', 'grad_vertical', 'grad_diagonal', 'grad_glow', 'grad_rainbow'];
+  for(var pi=25; pi<55; pi++) a.push('p'+pi);
+  return a;
+})();
 var PATTERN_THRESHOLDS = (function() {
   var a = [0];
-  for (var i = 1; i < 25; i++) {
+  for (var i = 1; i < 55; i++) {
     a.push(a[i - 1] + 2 + Math.floor(i / 5));
   }
   return a;
@@ -101,7 +105,9 @@ function freshState(){
     warn:null, taught:false, mute:false, view:'main',
     skill:0, autoDisabled:{}, galleryDisabled:false,
     bgMix:null, bgPattern:null, unlockedPatterns:1,
-    colorsUsed:[RED], usedSecondColor:false
+    colorsUsed:[RED], usedSecondColor:false,
+    autoPickShape:false, autoPickShapeEnabled:false,
+    autoPickPattern:false, autoPickPatternEnabled:false
   };
   st.cur={stripes:[], n:0, target:5+((Math.random()*6)|0), kind:st.shapeOrder[0], flash:0, pattern:'stripes'};
   return st;
@@ -124,7 +130,7 @@ function pickPlace(){
   var fy=L.frame.y + s + Math.random()*(L.frame.h - 2*s);
   return {x:fx,y:fy,s:s};
 }
-function commitArt(f){ S.art.push({k:f.kind,x:f.tx,y:f.ty,mix:f.mix,s:f.s,rot:f.rot,t:0,pattern:f.pattern}); spawnGlint(f.tx,f.ty,f.mix[0].col); }
+function commitArt(f){ S.art.push({k:f.kind,x:f.tx,y:f.ty,mix:f.mix,s:f.s,rot:f.rot,t:0,pattern:f.pattern,border:f.border}); spawnGlint(f.tx,f.ty,f.mix[0].col); }
 
 /* ---------- actions ---------- */
 function warn(x,y){ S.warn={x:x,y:y,t:0}; tone(120,0.16,"sawtooth",0.35); }
@@ -134,24 +140,26 @@ function buyAutoColor(hex,x,y){ var c=autoCost(hex); if(!canSpend(c)){ warn(x,y)
 function randKind(){ return S.shapeOrder[(Math.random()*S.unlocked)|0]; }
 function resetCur(){
   var limit = S.unlockedPatterns || 1;
-  var pat = PATTERNS[(Math.random() * limit) | 0];
-  S.cur={stripes:[], n:0, target:5+((Math.random()*6)|0), kind:randKind(), flash:0, pattern:pat};
+  var k = (S.cur && !S.autoPickShapeEnabled) ? S.cur.kind : randKind();
+  var pat = (S.cur && !S.autoPickPatternEnabled) ? S.cur.pattern : PATTERNS[(Math.random() * limit) | 0];
+  S.cur={stripes:[], n:0, target:5+((Math.random()*6)|0), kind:k, flash:0, pattern:pat};
 }
 function depositCurrent(){
   var st=S.cur.stripes, tot=0,i; for(i=0;i<st.length;i++) tot+=st[i].amt;
   if(tot>0){
     var mix=st.map(function(s){ return {col:s.col, share:s.amt/tot}; });
     var pl=pickPlace();
-    S.flyers.push({x:L.well.cx,y:L.well.cy,tx:pl.x,ty:pl.y,t:0,kind:S.cur.kind,mix:mix,s:pl.s,rot:Math.random()*PI2,pattern:S.cur.pattern});
+    var hasBorder = Math.random() < 0.5;
+    S.flyers.push({x:L.well.cx,y:L.well.cy,tx:pl.x,ty:pl.y,t:0,kind:S.cur.kind,mix:mix,s:pl.s,rot:Math.random()*PI2,pattern:S.cur.pattern,border:hasBorder});
     chord(NOTE[st[st.length-1].col]||NOTE[RED]);
     S.skill = (S.skill || 0) + 1;
-    while(S.unlocked < 60 && S.skill >= SHAPE_THRESHOLDS[S.unlocked]){
+    while(S.unlocked < 90 && S.skill >= SHAPE_THRESHOLDS[S.unlocked]){
       S.unlocked++;
       var slot = L.shapeSlots[S.unlocked-1];
       if(slot) spawnGlint(slot.x + slot.w/2, slot.y + slot.h/2, GOLD);
       chord(NOTE[BLUE]);
     }
-    while(S.unlockedPatterns < 25 && S.skill >= PATTERN_THRESHOLDS[S.unlockedPatterns]){
+    while(S.unlockedPatterns < 55 && S.skill >= PATTERN_THRESHOLDS[S.unlockedPatterns]){
       if(!S.usedSecondColor) break;
       S.unlockedPatterns++;
       chord(NOTE[YEL]);
@@ -248,56 +256,69 @@ function buildKindPath(g,kind,cx,cy,r){
   else if(kind==='cross'){ var t=r*0.32; g.rect(cx-t,cy-r,2*t,2*r); g.rect(cx-r,cy-t,2*r,2*t); }
   else if(kind.charAt(0)==='s'){
     var idx = parseInt(kind.substring(1), 10);
-    function seededRand(s) {
-      var x = Math.sin(s) * 10000;
-      return x - Math.floor(x);
+    if(idx === 10 || idx === 25 || idx === 40) {
+      var angle = (idx === 10 ? 0 : (idx === 25 ? 1 : 2)) * Math.PI / 4;
+      var thickness = r * 0.08;
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(angle);
+      g.rect(-r * 0.95, -thickness / 2, r * 1.9, thickness);
+      g.restore();
+    } else {
+      function seededRand(s) {
+        var x = Math.sin(s) * 10000;
+        return x - Math.floor(x);
+      }
+      var s1 = seededRand(idx * 7 + 1);
+      var s2 = seededRand(idx * 7 + 2);
+      var s3 = seededRand(idx * 7 + 3);
+      var s4 = seededRand(idx * 7 + 4);
+      var s5 = seededRand(idx * 7 + 5);
+      var s6 = seededRand(idx * 7 + 6);
+      
+      var f1 = 2 + Math.floor(s1 * 3);
+      var f2 = 5 + Math.floor(s2 * 3);
+      
+      var amp1 = 0.12 + s3 * 0.18;
+      var amp2 = 0.05 + s4 * 0.10;
+      
+      var phase1 = s5 * PI2;
+      var phase2 = s6 * PI2;
+      
+      var squish = 0.75 + seededRand(idx * 7 + 7) * 0.25;
+      
+      var steps = 100;
+      for (var step = 0; step <= steps; step++) {
+        var theta = (step / steps) * PI2;
+        var rMult = 1.0;
+        rMult += amp1 * Math.sin(f1 * theta + phase1);
+        rMult += amp2 * Math.cos(f2 * theta + phase2);
+        
+        rMult = Math.max(0.2, Math.min(1.4, rMult * 0.55));
+        var curR = r * rMult;
+        var px = cx + Math.cos(theta) * curR;
+        var py = cy + Math.sin(theta) * curR * squish;
+        
+        if (step === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
+      }
+      g.closePath();
     }
-    var seed1 = seededRand(idx + 1);
-    var seed2 = seededRand(idx + 2);
-    var seed3 = seededRand(idx + 3);
-    var seed4 = seededRand(idx + 4);
-    var seed5 = seededRand(idx + 5);
-
-    var lobes = 3 + Math.floor(seed1 * 10);
-    var depth = 0.25 + seed2 * 0.45;
-    var skew = seed3 * 0.5 - 0.25;
-    var squish = 0.65 + seed4 * 0.7;
-    var noiseFreq = 4 + Math.floor(seed5 * 12);
-
-    var steps = 120;
-    for (var step = 0; step <= steps; step++) {
-      var theta = (step / steps) * PI2;
-      var warpedTheta = theta + skew * Math.sin(2 * theta) + 0.15 * Math.cos(3 * theta);
-      
-      var lobeWave = 1.0 - 2.0 * Math.abs(Math.sin(lobes * warpedTheta / 2));
-      var noiseWave = Math.abs(Math.sin(noiseFreq * warpedTheta)) - 0.5;
-      
-      var rMult = 1.0;
-      rMult += depth * lobeWave;
-      rMult += 0.22 * noiseWave;
-      rMult += 0.25 * Math.abs(Math.cos(2 * warpedTheta)) - 0.12;
-      
-      rMult = Math.max(0.15, Math.min(1.4, rMult * 0.6));
-      var curR = r * rMult;
-      var px = cx + Math.cos(theta) * curR;
-      var py = cy + Math.sin(theta) * curR * squish;
-      if (step === 0) g.moveTo(px, py);
-      else g.lineTo(px, py);
-    }
-    g.closePath();
   }
 }
 function fillKind(kind,cx,cy,r,col){ ctx.save(); buildKindPath(ctx,kind,cx,cy,r); ctx.fillStyle=col; ctx.fill(kind==='ring'?'evenodd':'nonzero'); ctx.restore(); }
-function drawKindFilled(g,kind,cx,cy,r,mix,rot,pattern){
+function drawKindFilled(g,kind,cx,cy,r,mix,rot,pattern,border){
   g.save(); if(rot){ g.translate(cx,cy); g.rotate(rot); g.translate(-cx,-cy); }
   buildKindPath(g,kind,cx,cy,r); g.clip(kind==='ring'?'evenodd':'nonzero');
   if(rot){ g.translate(cx,cy); g.rotate(-rot); g.translate(-cx,-cy); }
   bandFill(g,cx,cy,r,mix,1.0,pattern);
   g.restore();
-  g.save(); if(rot){ g.translate(cx,cy); g.rotate(rot); g.translate(-cx,-cy); }
-  buildKindPath(g,kind,cx,cy,r); g.strokeStyle="rgba(21,18,16,0.18)"; g.lineWidth=Math.max(1,r*0.035); g.stroke(); g.restore();
+  if(border !== false){
+    g.save(); if(rot){ g.translate(cx,cy); g.rotate(rot); g.translate(-cx,-cy); }
+    buildKindPath(g,kind,cx,cy,r); g.strokeStyle="rgba(21,18,16,0.18)"; g.lineWidth=Math.max(1,r*0.035); g.stroke(); g.restore();
+  }
 }
-function drawArt(g,e){ var pop=e.t<1?(1-Math.pow(1-e.t,3)):1; drawKindFilled(g,e.k,e.x,e.y,e.s*pop,e.mix,e.rot,e.pattern); }
+function drawArt(g,e){ var pop=e.t<1?(1-Math.pow(1-e.t,3)):1; drawKindFilled(g,e.k,e.x,e.y,e.s*pop,e.mix,e.rot,e.pattern,e.border); }
 
 var L={};
 function layout(){
@@ -362,24 +383,28 @@ function layout(){
   var selectorH = H - m - yCursor;
   L.selectorCard = {x: left, y: yCursor, w: rowW, h: selectorH};
   
-  var titleH = 14;
+  var titleH = 20;
   var gridTop = yCursor + titleH + 4;
   var gridAvailH = selectorH - titleH - 8;
   
-  var btnSize = Math.max(10, Math.min(18, gridAvailH / 6.5));
+  var btnSize = Math.max(12, Math.min(22, gridAvailH / 10.5));
   var btnGap = Math.max(2, btnSize * 0.15);
   
   var shapeGridW = rowW * 0.64;
   var shapeCols = Math.floor((shapeGridW - m) / (btnSize + btnGap)) || 1;
   L.shapeCols = shapeCols;
   
+  L.shapeAutoPick = {x: left + shapeGridW - 42, y: yCursor + 2, w: 38, h: 16};
+  
   var patGridX = left + shapeGridW + m * 0.2;
   var patGridW = rowW - shapeGridW - m * 0.2;
   var patCols = Math.floor((patGridW - m) / (btnSize + btnGap)) || 1;
   L.patCols = patCols;
   
+  L.patAutoPick = {x: left + rowW - 42, y: yCursor + 2, w: 38, h: 16};
+  
   L.shapeSlots = [];
-  for(var i=0;i<60;i++){
+  for(var i=0;i<90;i++){
     var col = i % shapeCols;
     var row = Math.floor(i / shapeCols);
     var bx = left + m * 0.4 + col * (btnSize + btnGap);
@@ -388,7 +413,7 @@ function layout(){
   }
 
   L.patternSlots = [];
-  for(var i=0;i<25;i++){
+  for(var i=0;i<55;i++){
     var col = i % patCols;
     var row = Math.floor(i / patCols);
     var bx = patGridX + col * (btnSize + btnGap);
@@ -468,8 +493,14 @@ function hitThermoBottomLeft(x, y) {
 }
 
 function cheatUnlockEverything(){
-  S.unlocked = 60;
-  S.unlockedPatterns = 25;
+  S.unlocked = 90;
+  S.unlockedPatterns = 55;
+  S.usedSecondColor = true;
+  S.colorsUsed = COLOR_LIST.slice();
+  S.autoPickShape = true;
+  S.autoPickShapeEnabled = true;
+  S.autoPickPattern = true;
+  S.autoPickPatternEnabled = true;
   S.usedSecondColor = true;
   S.colorsUsed = COLOR_LIST.slice();
   S.skill = 500;
@@ -535,6 +566,9 @@ cv.addEventListener("pointerdown", function(e){
   // Check if hitting the gallery (autosell) button
   var hitGallery = hitCircle(x, y, L.gallery.cx, L.gallery.cy, L.gallery.r * 1.3);
 
+  var hitShapePick = L.shapeAutoPick && hitRect(x, y, L.shapeAutoPick);
+  var hitPatPick = L.patAutoPick && hitRect(x, y, L.patAutoPick);
+
   if(hitGallery && S.galleryOwned){
     pressTarget = { type: 'gallery' };
     pressTimer = setTimeout(function(){
@@ -549,6 +583,28 @@ cv.addEventListener("pointerdown", function(e){
       S.autoDisabled[hitAuto.hex] = !S.autoDisabled[hitAuto.hex];
       tone(NOTE[hitAuto.hex]*0.7, 0.25, "sine", 0.4);
     }, 600);
+  } else if(hitShapePick){
+    if(!S.autoPickShape){
+      pressTarget = { type: 'shapePick', buy: true, x: x, y: y };
+    } else {
+      pressTarget = { type: 'shapePick', buy: false };
+      pressTimer = setTimeout(function(){
+        longPressed = true;
+        S.autoPickShapeEnabled = !S.autoPickShapeEnabled;
+        tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+      }, 600);
+    }
+  } else if(hitPatPick){
+    if(!S.autoPickPattern){
+      pressTarget = { type: 'patPick', buy: true, x: x, y: y };
+    } else {
+      pressTarget = { type: 'patPick', buy: false };
+      pressTimer = setTimeout(function(){
+        longPressed = true;
+        S.autoPickPatternEnabled = !S.autoPickPatternEnabled;
+        tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+      }, 600);
+    }
   } else {
     onDown(x, y);
   }
@@ -564,6 +620,12 @@ cv.addEventListener("pointerup", function(e){
         buyAutoColor(pressTarget.hex, pressTarget.x+pressTarget.w/2, pressTarget.y+pressTarget.h/2);
       } else if(pressTarget.type === 'gallery'){
         buyGallery();
+      } else if(pressTarget.type === 'shapePick' && pressTarget.buy){
+        if(canSpend(150)){ S.money-=150; S.autoPickShape=true; S.autoPickShapeEnabled=true; chord(NOTE[GOLD]); }
+        else warn(pressTarget.x, pressTarget.y);
+      } else if(pressTarget.type === 'patPick' && pressTarget.buy){
+        if(canSpend(150)){ S.money-=150; S.autoPickPattern=true; S.autoPickPatternEnabled=true; chord(NOTE[GOLD]); }
+        else warn(pressTarget.x, pressTarget.y);
       }
     }
     pressTarget = null;
@@ -661,7 +723,7 @@ function draw(){
   drawCard(L.selectorCard);
   
   drawComposition(); drawFlyers(); drawWell(); drawSell(); drawShapeRow(); drawPatternRow(); drawColorRow(); drawAutoRow();
-  drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawMute(); drawHUD(); drawWarn();
+  drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawMute(); drawHUD(); drawAutoPicks(); drawWarn();
   drawStamp();
   if(S.dead) drawDeath();
 }
@@ -769,6 +831,42 @@ function drawAutoRow(){
     }
   }
 }
+function drawAutoPicks(){
+  var sb = L.shapeAutoPick;
+  if(sb){
+    ctx.lineWidth = 1;
+    if(!S.autoPickShape){
+      var afford = canSpend(150);
+      ctx.fillStyle = afford ? "rgba(206,154,44,0.15)" : "rgba(21,18,16,0.03)";
+      ctx.strokeStyle = afford ? GOLD : "rgba(21,18,16,0.12)";
+      roundRect(sb.x, sb.y, sb.w, sb.h, 3); ctx.fill(); ctx.stroke();
+      txt("$150", sb.x + sb.w/2, sb.y + sb.h - 4.5, 9, afford ? GOLD : "rgba(21,18,16,0.4)", "center");
+    } else {
+      var active = S.autoPickShapeEnabled;
+      ctx.fillStyle = active ? "rgba(30,158,90,0.18)" : "rgba(21,18,16,0.06)";
+      ctx.strokeStyle = active ? GRN : INK;
+      roundRect(sb.x, sb.y, sb.w, sb.h, 3); ctx.fill(); ctx.stroke();
+      txt("⬢ ↺", sb.x + sb.w/2, sb.y + sb.h - 4, 10, active ? GRN : "rgba(21,18,16,0.5)", "center");
+    }
+  }
+  var pb = L.patAutoPick;
+  if(pb){
+    ctx.lineWidth = 1;
+    if(!S.autoPickPattern){
+      var afford = canSpend(150);
+      ctx.fillStyle = afford ? "rgba(206,154,44,0.15)" : "rgba(21,18,16,0.03)";
+      ctx.strokeStyle = afford ? GOLD : "rgba(21,18,16,0.12)";
+      roundRect(pb.x, pb.y, pb.w, pb.h, 3); ctx.fill(); ctx.stroke();
+      txt("$150", pb.x + pb.w/2, pb.y + pb.h - 4.5, 9, afford ? GOLD : "rgba(21,18,16,0.4)", "center");
+    } else {
+      var active = S.autoPickPatternEnabled;
+      ctx.fillStyle = active ? "rgba(30,158,90,0.18)" : "rgba(21,18,16,0.06)";
+      ctx.strokeStyle = active ? GRN : INK;
+      roundRect(pb.x, pb.y, pb.w, pb.h, 3); ctx.fill(); ctx.stroke();
+      txt("▩ ↺", pb.x + pb.w/2, pb.y + pb.h - 4, 10, active ? GRN : "rgba(21,18,16,0.5)", "center");
+    }
+  }
+}
 function drawDeath(){
   var a=Math.min(0.82, S.deadT*1.2);
   ctx.fillStyle="rgba(122,14,10,"+a+")"; ctx.fillRect(0,0,W,H);
@@ -839,7 +937,7 @@ function drawComposition(){
   ctx.restore();
   ctx.strokeStyle=INK; ctx.lineWidth=Math.max(4,W*0.012); ctx.strokeRect(f.x,f.y,f.w,f.h);
 }
-function drawFlyers(){ for(var i=0;i<S.flyers.length;i++){ var f=S.flyers[i], e=f.t*f.t*(3-2*f.t); var x=f.x+(f.tx-f.x)*e, y=f.y+(f.ty-f.y)*e, r=f.s*(0.4+0.6*e); drawKindFilled(ctx,f.kind,x,y,r,f.mix,f.rot*e,f.pattern); } }
+function drawFlyers(){ for(var i=0;i<S.flyers.length;i++){ var f=S.flyers[i], e=f.t*f.t*(3-2*f.t); var x=f.x+(f.tx-f.x)*e, y=f.y+(f.ty-f.y)*e, r=f.s*(0.4+0.6*e); drawKindFilled(ctx,f.kind,x,y,r,f.mix,f.rot*e,f.pattern,f.border); } }
 function bandFill(g,cx,cy,r,mix,frac,pattern){
   var top=cy-r,bot=cy+r;
   var totalH=(bot-top)*frac;
@@ -1122,6 +1220,56 @@ function bandFill(g,cx,cy,r,mix,frac,pattern){
     addMixColorStops(grad, mix);
     g.fillStyle = grad;
     g.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3.0, r * 3.0);
+  } else if(pattern && pattern.charAt(0) === 'p') {
+    var pIdx = parseInt(pattern.substring(1), 10);
+    if (pIdx % 5 === 0) {
+      var count = 4 + (pIdx % 3) * 2;
+      for (var k = count; k > 0; k--) {
+        var kr = r * (k / count);
+        g.fillStyle = mix[k % mix.length].col;
+        g.beginPath(); g.arc(cx, cy, kr, 0, PI2); g.fill();
+      }
+    } else if (pIdx % 5 === 1) {
+      var rays = 6 + (pIdx % 4) * 2;
+      for (var k = 0; k < rays; k++) {
+        var angle1 = (k / rays) * PI2;
+        var angle2 = ((k + 0.6) / rays) * PI2;
+        g.fillStyle = mix[k % mix.length].col;
+        g.beginPath(); g.moveTo(cx, cy); g.arc(cx, cy, r * 1.5, angle1, angle2); g.closePath(); g.fill();
+      }
+    } else if (pIdx % 5 === 2) {
+      var size = r * (0.15 + (pIdx % 3) * 0.1);
+      for (var x = cx - r * 1.5; x < cx + r * 1.5; x += size) {
+        for (var y = cy - r * 1.5; y < cy + r * 1.5; y += size) {
+          var step = Math.floor((x - cx + y - cy) / size);
+          g.fillStyle = mix[Math.abs(step) % mix.length].col;
+          g.fillRect(x, y, size + 0.5, size + 0.5);
+        }
+      }
+    } else if (pIdx % 5 === 3) {
+      var amp = r * 0.12;
+      var freq = (3 + (pIdx % 3)) / r;
+      g.fillStyle = mix[0].col; g.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3.0, r * 3.0);
+      for (var x = cx - r * 1.35; x < cx + r * 1.35; x += r * 0.45) {
+        for (var y = cy - r * 1.35; y < cy + r * 1.35; y += r * 0.45) {
+          var wy = y + amp * Math.sin(freq * (x - cx));
+          g.fillStyle = mix[Math.abs(Math.round(x + y)) % mix.length].col;
+          g.beginPath(); g.arc(x, wy, r * 0.15, 0, PI2); g.fill();
+        }
+      }
+    } else {
+      g.fillStyle = mix[0].col; g.fillRect(cx - r * 1.5, cy - r * 1.5, r * 3.0, r * 3.0);
+      g.strokeStyle = mix[1 % mix.length].col; g.lineWidth = r * 0.12;
+      g.beginPath();
+      for (var theta = 0; theta < PI2 * 3; theta += 0.1) {
+        var rad = r * 0.08 * theta;
+        var px = cx + Math.cos(theta) * rad;
+        var py = cy + Math.sin(theta) * rad;
+        if (theta === 0) g.moveTo(px, py);
+        else g.lineTo(px, py);
+      }
+      g.stroke();
+    }
   } else {
     var y0=bot;
     for(var i=0;i<mix.length;i++){
@@ -1161,9 +1309,10 @@ function costRing(cx,cy,r,prog){ prog=Math.max(0,Math.min(1,prog)); var aff=prog
   ctx.strokeStyle=aff?GOLD:INK; ctx.globalAlpha=aff?(0.55+Math.sin(time*4)*0.45):1; ctx.beginPath(); ctx.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+prog*PI2); ctx.stroke(); ctx.globalAlpha=1; }
 
 /* icons */
-function bloodDrop(cx,cy,r,col){ ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(cx,cy-r);
+function bloodDrop(cx,cy,r,col){ r=Math.max(0.1,r); ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(cx,cy-r);
   ctx.bezierCurveTo(cx+r*0.95,cy-r*0.1,cx+r*0.7,cy+r,cx,cy+r); ctx.bezierCurveTo(cx-r*0.7,cy+r,cx-r*0.95,cy-r*0.1,cx,cy-r); ctx.closePath(); ctx.fill(); }
 function paintBucket(cx,cy,r,col){
+  r=Math.max(0.1,r);
   ctx.save();
   ctx.fillStyle = col;
   ctx.strokeStyle = col;
@@ -1293,8 +1442,8 @@ function drawColorRow(){
   for(var i=0;i<L.colors.length;i++){ var b=L.colors[i], hex=b.hex, free=(hex===RED);
     var afford = free || canSpend(DROP_COST);
     ctx.globalAlpha=afford?1:0.35;
-    var selectW = b.w - b.h;
-    var ic=Math.min(selectW, b.h)*0.28, cx=b.x+selectW/2, cy=b.y+b.h/2;
+    var selectW = Math.max(1, b.w - b.h);
+    var ic=Math.max(0.1, Math.min(selectW, b.h)*0.28), cx=b.x+selectW/2, cy=b.y+b.h/2;
     if(free){
       ctx.fillStyle="#4A0E0A"; ctx.fillRect(b.x,b.y,selectW,b.h);
       var bf=Math.max(0,Math.min(1,S.blood/BLOOD_MAX)), fh=b.h*bf;
