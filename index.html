@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>AUTOMAT</title>
+<title>Modern Art</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect x='10' y='10' width='80' height='80' rx='8' fill='%23EDE6D6' stroke='%23151210' stroke-width='8'/%3E%3Cpath d='M50 22 L58 42 L78 50 L58 58 L50 78 L42 58 L22 50 L42 42 Z' fill='%231E9E5A' stroke='%23151210' stroke-width='4' stroke-linejoin='round'/%3E%3Cpath d='M75 75 Q75 83 79 83 Q83 83 83 75 Q83 68 79 61 Q75 68 75 75 Z' fill='%23DE342B'/%3E%3C/svg%3E">
 <style>
   html,body{margin:0;padding:0;height:100%;background:#EDE6D6;overflow:hidden;
@@ -95,7 +95,7 @@ function mkGrid(){ var a=[]; for(var r=0;r<5;r++)for(var c=0;c<4;c++)a.push([c,r
 function shuffle(a){ a=a.slice(); for(var i=a.length-1;i>0;i--){var j=(Math.random()*(i+1))|0;var t=a[i];a[i]=a[j];a[j]=t;} return a; }
 function freshState(){
   var st={
-    money:START_MONEY, fame:0, artMult:1, artTimer:3,
+    money:START_MONEY, fame:0,
     unlocked:1, shapeOrder:shuffle(SHAPE_KINDS), cur:null, galleryOwned:false,
     paintSpend:0, sellCd:0,
     blood:BLOOD_MAX, auto:{}, autoT:{}, dead:false, deadT:0, selColor:RED,
@@ -120,7 +120,7 @@ var SAVE_KEY='modernart.save.v1';
 // in S is plain JSON data.
 function serializeState(){
   var snap={};
-  for(var k in S){ if(k==='gallery'||k==='__proto__') continue; snap[k]=S[k]; }
+  for(var k in S){ if(k==='gallery'||k==='artMult'||k==='artTimer'||k==='__proto__') continue; snap[k]=S[k]; }
   return snap;
 }
 function saveGame(){
@@ -132,7 +132,7 @@ function loadGame(){
   var data; try{ data=JSON.parse(raw); }catch(e){ return null; }
   if(!data || typeof data.money!=='number') return null;
   var st=freshState();                       // defaults, so fields added since the save still exist
-  for(var k in data){ if(k==='gallery'||k==='__proto__') continue; st[k]=data[k]; }
+  for(var k in data){ if(k==='gallery'||k==='artMult'||k==='artTimer'||k==='__proto__') continue; st[k]=data[k]; }
   st.gallery=[];                             // gallery always starts empty (never saved)
   return st;
 }
@@ -272,13 +272,11 @@ function doSell(){
   if(!sellable()) return;
   var shot=snapshotPainting();
   var img=new Image(); img.src=renderPainting(shot,140).toDataURL();   // small raster for the grid
-  var v=Math.max(1,variety());
-  var price=BASE_SALE*(1+0.5*(v-1))*S.artMult*fameMult()*(0.9+Math.random()*0.2);
-  var pips=Math.max(1,Math.min(9,Math.round(price/6)));
-  var nc=Math.max(5,Math.min(26,Math.round(price/3)));
-  // less effort (cheaper paint) => more fame
-  var fg = S.paintSpend<=0?3 : (S.paintSpend<=6?2:1);
-  S.money+=price; S.fame+=fg;
+  var price=BASE_SALE;
+  var pips=1;
+  var nc=8;
+  S.money+=price;
+  S.fame += 1;
   S.gallery.push({img:img,val:pips,shot:shot}); if(S.gallery.length>60) S.gallery.shift();
   for(var k=0;k<nc;k++) S.coins.push({x:L.frame.x+Math.random()*L.frame.w, y:L.frame.y+Math.random()*L.frame.h, tx:L.hud.x+16, ty:L.hud.y+8, t:-Math.random()*0.25});
   chord(NOTE[GRN]); setTimeout(function(){chord(NOTE[YEL]*1.5);},110);
@@ -736,8 +734,6 @@ function update(dt){
       }
     }
   }
-  // art economy ratchets up at random rates, never down
-  S.artTimer-=dt; if(S.artTimer<=0){ S.artMult+=0.02+Math.random()*0.16; S.artTimer=2+Math.random()*4; }
   // flyers -> canvas
   for(var fi=S.flyers.length-1;fi>=0;fi--){ var f=S.flyers[fi]; f.t+=dt/0.55; if(f.t>=1){ commitArt(f); S.flyers.splice(fi,1); } }
   for(var a=0;a<S.art.length;a++){ if(S.art[a].t<1) S.art[a].t=Math.min(1,S.art[a].t+dt*2.6); }
@@ -933,13 +929,21 @@ function drawDeath(){
   ctx.fillStyle="rgba(122,14,10,"+a+")"; ctx.fillRect(0,0,W,H);
   var r=Math.min(W,H)*0.14, cy=H*0.40;
   skull(W/2,cy,r,"#F2ECDF","#3A0806");
-  if(S.deadT>0.6 && (!REDUCED? (Math.sin(time*3)>-0.3):true)) txt("↺", W/2, cy+r*1.75, 24, "rgba(255,255,255,0.85)", "center");
+  if(S.deadT>0.6 && (!REDUCED? (Math.sin(time*3)>-0.3):true)){
+    ctx.save();
+    ctx.fillStyle="#FFFFFF";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.font="900 " + Math.max(22, Math.min(W, H) * 0.055) + "px 'Comic Sans MS','Papyrus','Brush Script MT',cursive";
+    ctx.fillText("You arted too hard", W/2, cy+r*1.75);
+    ctx.restore();
+  }
 }
 
 function drawHUD(){
   var x=L.hud.x, y=L.hud.y;
   txt("$"+Math.floor(S.money), x, y+14, 14, INK);
-  txt("art economy "+S.artMult.toFixed(1)+"x", x, y+28, 9.5, INK);
+  txt("sold paintings "+S.gallery.length, x, y+28, 9.5, INK);
   txt("fame multiplier "+fameMult().toFixed(1)+"x", x, y+40, 9.5, GOLD);
 }
 
@@ -979,7 +983,7 @@ function downloadImage(e){
   if(!src) return;
   try{
     var a=document.createElement('a');
-    a.href=src; a.download='automat-painting.png';
+    a.href=src; a.download='modern-art-painting.png';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     tone(NOTE[GRN],0.16,"sine",0.4);
   }catch(err){}
