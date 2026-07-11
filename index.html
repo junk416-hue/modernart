@@ -33,11 +33,10 @@ var COLOR_LIST=[RED,BLUE,YEL,GRN,INK,WHITE,ORANGE,PURPLE,PINK,TEAL,PEACH,FOREST]
 var NOTE={}; NOTE[RED]=329.6;NOTE[BLUE]=196.0;NOTE[YEL]=493.9;NOTE[INK]=146.8;NOTE[GRN]=293.7;NOTE[WHITE]=587.3;NOTE[GOLD]=392.0;
 NOTE[ORANGE]=220.0;NOTE[PURPLE]=246.9;NOTE[PINK]=277.2;NOTE[TEAL]=311.1;NOTE[PEACH]=622.3;NOTE[FOREST]=987.8;
 
-var MONEY_FLOOR=100;     // canvas reserve: player must always keep this
+var MONEY_FLOOR=0;       // no reserve — player can spend down to zero
 var BLOOD_MAX=100, BLOOD_COST=5, BLOOD_REGEN=7, BLOOD_LOW=28;   // red paint = blood; empty = death
 var AUTO_BASE=30, AUTO_GROW=1.7, AUTO_CAP=24;                    // auto-paint buyers
 var START_MONEY=0;       // start broke — bootstrap with free red paint
-var DROP_COST=5;         // non-red paint drop
 var GALLERY_COST=500;    // auto-sell upgrade
 var BASE_SALE=8;
 var SHAPE_THRESHOLDS = (function() {
@@ -97,7 +96,7 @@ function freshState(){
   var st={
     money:START_MONEY, fame:0,
     unlocked:1, shapeOrder:shuffle(SHAPE_KINDS), cur:null, galleryOwned:false,
-    paintSpend:0, sellCd:0,
+    paintSpend:0, paintDropN:0, sellCd:0,
     blood:BLOOD_MAX, auto:{}, autoT:{}, dead:false, deadT:0, selColor:RED,
     moneyScale:1000, iconVal:10,
     art:[], order:shuffle(mkGrid()), flyers:[],
@@ -143,7 +142,7 @@ var clearPrompt=null;
 var saveDirty=false, saveClock=0;   // coalesce frequent saves (auto-sell can fire several times a second)
 function requestSave(){ saveDirty=true; }
 function clearCurrentPainting(){
-  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.paintDropN=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
   requestSave();
 }
@@ -158,7 +157,8 @@ function requiredShapes(){ return Math.max(5, 10 - S.fame); }             // hid
 function curShapes(){ return S.art.length + S.flyers.length; }
 function sellable(){ return curShapes() >= requiredShapes(); }
 function canPaint(){ return curShapes() < requiredShapes(); }
-function canSpend(cost){ return (S.money - cost) >= MONEY_FLOOR; }        // always keep the $100 reserve
+function canSpend(cost){ return S.money >= cost; }
+function paintDropCost(){ return 2 + (S.paintDropN || 0); }               // $2 first drop, $3 second, +$1 each
 function variety(){ var s={},n=0; for(var i=0;i<S.art.length;i++){ s[S.art[i].mix[0].col]=1; } for(var k in s) n++; return n; }
 
 /* ---------- placement ---------- */
@@ -219,8 +219,8 @@ function paintDrop(hex,sx,sy,auto){
     S.blood-=BLOOD_COST;
     if(S.blood<=0){ S.blood=0; die(); return; }             // the drop that empties the blood kills you
   } else {
-    if(!canSpend(DROP_COST)){ if(!auto) warn(sx,sy); return; } // never dip under the reserve
-    S.money-=DROP_COST; S.paintSpend+=DROP_COST;
+    var dc=paintDropCost(); if(!canSpend(dc)){ if(!auto) warn(sx,sy); return; }
+    S.money-=dc; S.paintSpend+=dc; S.paintDropN=(S.paintDropN||0)+1;
   }
   if(!auto) S.selColor=hex;
   if(S.colorsUsed && S.colorsUsed.indexOf(hex) === -1){
@@ -296,7 +296,7 @@ function doSell(){
   for(var k=0;k<nc;k++) S.coins.push({x:L.frame.x+Math.random()*L.frame.w, y:L.frame.y+Math.random()*L.frame.h, tx:L.hud.x+16, ty:L.hud.y+8, t:-Math.random()*0.25});
   chord(NOTE[GRN]); setTimeout(function(){chord(NOTE[YEL]*1.5);},110);
   // fresh canvas
-  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.paintDropN=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
   requestSave();                                               // autosave after each sale (coalesced, see update)
 }
@@ -817,7 +817,7 @@ function update(dt){
       S.autoT[acol]=Math.max(0.32, 1.3/lvl);
       if(curShapes()<AUTO_CAP){
         if(acol===RED){ if(S.blood>BLOOD_COST*1.7) paintDrop(RED,L.well.cx,L.well.cy,true); }
-        else if(canSpend(DROP_COST)) paintDrop(acol,L.well.cx,L.well.cy,true);
+        else if(canSpend(paintDropCost())) paintDrop(acol,L.well.cx,L.well.cy,true);
       }
     }
   }
@@ -1651,7 +1651,7 @@ function bloodGauge(cx,cy,r,frac){
 }
 function drawColorRow(){
   for(var i=0;i<L.colors.length;i++){ var b=L.colors[i], hex=b.hex, free=(hex===RED);
-    var afford = free || canSpend(DROP_COST);
+    var afford = free || canSpend(paintDropCost());
     ctx.globalAlpha=afford?1:0.35;
     var selectW = Math.max(1, b.w - b.h);
     var ic=Math.max(0.1, Math.min(selectW, b.h)*0.28), cx=b.x+selectW/2, cy=b.y+b.h/2;
