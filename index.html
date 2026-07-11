@@ -96,7 +96,7 @@ function freshState(){
   var st={
     money:START_MONEY, fame:0,
     unlocked:1, shapeOrder:shuffle(SHAPE_KINDS), cur:null, galleryOwned:false,
-    paintSpend:0, paintDropN:0, sellCd:0,
+    paintSpend:0, sellCd:0,
     blood:BLOOD_MAX, auto:{}, autoT:{}, dead:false, deadT:0, selColor:RED,
     moneyScale:1000, iconVal:10,
     art:[], order:shuffle(mkGrid()), flyers:[],
@@ -142,7 +142,7 @@ var clearPrompt=null;
 var saveDirty=false, saveClock=0;   // coalesce frequent saves (auto-sell can fire several times a second)
 function requestSave(){ saveDirty=true; }
 function clearCurrentPainting(){
-  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.paintDropN=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
   requestSave();
 }
@@ -158,7 +158,7 @@ function curShapes(){ return S.art.length + S.flyers.length; }
 function sellable(){ return curShapes() >= requiredShapes(); }
 function canPaint(){ return curShapes() < requiredShapes(); }
 function canSpend(cost){ return S.money >= cost; }
-function paintDropCost(){ return 2 + (S.paintDropN || 0); }               // $2 first drop, $3 second, +$1 each
+function paintDropCost(){ return 3; }                                      // flat $2 per drop
 function variety(){ var s={},n=0; for(var i=0;i<S.art.length;i++){ s[S.art[i].mix[0].col]=1; } for(var k in s) n++; return n; }
 
 /* ---------- placement ---------- */
@@ -220,7 +220,7 @@ function paintDrop(hex,sx,sy,auto){
     if(S.blood<=0){ S.blood=0; die(); return; }             // the drop that empties the blood kills you
   } else {
     var dc=paintDropCost(); if(!canSpend(dc)){ if(!auto) warn(sx,sy); return; }
-    S.money-=dc; S.paintSpend+=dc; S.paintDropN=(S.paintDropN||0)+1;
+    S.money-=dc; S.paintSpend+=dc;
   }
   if(!auto) S.selColor=hex;
   if(S.colorsUsed && S.colorsUsed.indexOf(hex) === -1){
@@ -296,7 +296,7 @@ function doSell(){
   for(var k=0;k<nc;k++) S.coins.push({x:L.frame.x+Math.random()*L.frame.w, y:L.frame.y+Math.random()*L.frame.h, tx:L.hud.x+16, ty:L.hud.y+8, t:-Math.random()*0.25});
   chord(NOTE[GRN]); setTimeout(function(){chord(NOTE[YEL]*1.5);},110);
   // fresh canvas
-  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.paintDropN=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
   S.bgMix=null; S.bgPattern=null;
   requestSave();                                               // autosave after each sale (coalesced, see update)
 }
