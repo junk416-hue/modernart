@@ -107,7 +107,9 @@ function freshState(){
     bgMix:null, bgPattern:null, unlockedPatterns:1,
     colorsUsed:[RED], usedSecondColor:false,
     autoPickShape:false, autoPickShapeEnabled:false,
-    autoPickPattern:false, autoPickPatternEnabled:false
+    autoPickPattern:false, autoPickPatternEnabled:false,
+    bloodPromptClicks:0, bloodPromptDone:false, bloodPromptArrows:null,
+    bloodPromptArrowW:0, bloodPromptArrowH:0
   };
   st.cur={stripes:[], n:0, target:5+((Math.random()*6)|0), kind:st.shapeOrder[0], flash:0, pattern:'stripes'};
   return st;
@@ -137,10 +139,16 @@ function loadGame(){
   return st;
 }
 var clearArm=0;   // seconds left in the "tap again to confirm" window on the trash button
+var clearPrompt=null;
 var saveDirty=false, saveClock=0;   // coalesce frequent saves (auto-sell can fire several times a second)
 function requestSave(){ saveDirty=true; }
+function clearCurrentPainting(){
+  S.art=[]; S.flyers=[]; S.order=shuffle(mkGrid()); S.paintSpend=0; S.sellCd = (S.galleryOwned && !S.galleryDisabled) ? 0.02 : 1.2; resetCur();
+  S.bgMix=null; S.bgPattern=null;
+  requestSave();
+}
 function clearSave(armed){
-  if(armed){ clearArm=0; try{ localStorage.removeItem(SAVE_KEY); }catch(e){} S=freshState(); tone(140,0.3,"sawtooth",0.5); }
+  if(armed){ clearArm=0; clearPrompt={mode:'confirm'}; tone(140,0.3,"sawtooth",0.5); }
   else { clearArm=3; tone(200,0.14,"square",0.4); }          // first tap only arms it
 }
 
@@ -201,6 +209,13 @@ function depositCurrent(){
 }
 function paintDrop(hex,sx,sy,auto){
   if(hex===RED){
+    if(!auto && !S.bloodPromptDone){
+      S.bloodPromptClicks = Math.min(5, (S.bloodPromptClicks || 0) + 1);
+      if(S.bloodPromptClicks >= 5){
+        S.bloodPromptDone = true;
+        S.bloodPromptArrows = null;
+      }
+    }
     S.blood-=BLOOD_COST;
     if(S.blood<=0){ S.blood=0; die(); return; }             // the drop that empties the blood kills you
   } else {
@@ -498,6 +513,12 @@ function onDown(x,y){
   audioInit(); if(AC&&AC.state==="suspended") AC.resume();
   if(TITLE){ TITLE=false; if(!S.mute) chord(NOTE[YEL]); return; }
   if(S.dead){ if(S.deadT>0.6) S=freshState(); return; }      // tap to restart after death
+  if(clearPrompt){
+    var P=getClearPromptLayout();
+    if(hitRect(x,y,P.clear)){ clearPrompt=null; clearArm=0; clearCurrentPainting(); tone(120,0.2,"square",0.35); return; }
+    if(hitRect(x,y,P.newGame)){ clearPrompt=null; clearArm=0; try{ localStorage.removeItem(SAVE_KEY); }catch(e){} saveDirty=false; saveClock=0; S.dead=true; S.deadT=0; tone(80,0.5,"sawtooth",0.45); return; }
+    clearPrompt=null; return;
+  }
   if(S.view==='gallery'){                                    // gallery view
     if(zoomIdx>=0){                                          // enlarged: save button, else back to grid
       if(hitRect(x,y,L.zoomDownload)){ downloadImage(S.gallery[zoomIdx]); return; }
@@ -847,6 +868,8 @@ function draw(){
   drawComposition(); drawFlyers(); drawWell(); drawSell(); drawShapeRow(); drawPatternRow(); drawColorRow(); drawAutoRow();
   drawGlints(); drawCoins(); drawGallery(); drawGalleryViewBtn(); drawClear(); drawMute(); drawHUD(); drawAutoPicks(); drawWarn();
   drawStamp();
+  drawBloodPrompt();
+  drawClearPrompt();
   if(S.dead) drawDeath();
 }
 var BUILD = (function() {
@@ -1726,6 +1749,104 @@ function drawMute(){ var m=L.mute; ctx.strokeStyle=INK; ctx.fillStyle=INK; ctx.l
 function drawWarn(){ if(!S.warn) return; var w=S.warn, r=14+w.t*16, a=1-w.t;
   ctx.strokeStyle=RED; ctx.globalAlpha=a; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(w.x,w.y,r,0,PI2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(w.x-r*0.6,w.y-r*0.6); ctx.lineTo(w.x+r*0.6,w.y+r*0.6); ctx.stroke(); ctx.globalAlpha=1; }
+
+function getClearPromptLayout(){
+  var w=Math.min(420, Math.max(250, W*0.78));
+  var h=Math.min(220, Math.max(150, H*0.28));
+  var x=W/2-w/2, y=H/2-h/2;
+  var pad=Math.max(14, Math.min(W,H)*0.03);
+  var btnH=Math.max(34, Math.min(H, W)*0.06);
+  var btnW=(w - pad*3)/2;
+  return {
+    x:x, y:y, w:w, h:h,
+    clear:{x:x+pad, y:y+h-btnH-pad, w:btnW, h:btnH},
+    newGame:{x:x+pad*2+btnW, y:y+h-btnH-pad, w:btnW, h:btnH}
+  };
+}
+
+function drawClearPrompt(){
+  if(!clearPrompt) return;
+  var P=getClearPromptLayout();
+  ctx.save();
+  ctx.fillStyle="rgba(21,18,16,0.58)";
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#F5F0E6";
+  ctx.strokeStyle=INK;
+  ctx.lineWidth=2;
+  roundRect(P.x,P.y,P.w,P.h,10); ctx.fill(); ctx.stroke();
+  txt("This painting? or your life?", W/2, P.y+36, Math.max(16, Math.min(W,H)*0.028), INK, "center");
+  ctx.fillStyle="#E25A4F"; ctx.strokeStyle=INK; ctx.lineWidth=1.5;
+  roundRect(P.clear.x,P.clear.y,P.clear.w,P.clear.h,8); ctx.fill(); ctx.stroke();
+  txt("trash painting", P.clear.x+P.clear.w/2, P.clear.y+P.clear.h/2+4, 12, PAPER, "center");
+  ctx.fillStyle="#C92A2A"; ctx.strokeStyle=INK; ctx.lineWidth=1.5;
+  roundRect(P.newGame.x,P.newGame.y,P.newGame.w,P.newGame.h,8); ctx.fill(); ctx.stroke();
+  txt("trash life", P.newGame.x+P.newGame.w/2, P.newGame.y+P.newGame.h/2+4, 12, PAPER, "center");
+  ctx.restore();
+}
+
+function buildBloodPromptArrows(){
+  var b=L.colors && L.colors[0];
+  if(!b) return null;
+  var tx = b.x + b.w * 0.5;
+  var ty = b.y + b.h * 0.5;
+  var pad = Math.max(28, Math.min(W, H) * 0.08);
+  var arrows = [];
+  for(var i=0;i<5;i++){
+    var edge = i % 4;
+    var sx, sy;
+    if(edge===0){ sx = -pad; sy = Math.random() * H; }
+    else if(edge===1){ sx = W + pad; sy = Math.random() * H; }
+    else if(edge===2){ sx = Math.random() * W; sy = -pad; }
+    else { sx = Math.random() * W; sy = H + pad; }
+    sx += (Math.random() - 0.5) * Math.min(W, H) * 0.22;
+    sy += (Math.random() - 0.5) * Math.min(W, H) * 0.22;
+    arrows.push({x:sx, y:sy, phase:Math.random()*PI2, tx:tx, ty:ty});
+  }
+  return arrows;
+}
+
+function drawBloodPrompt(){
+  if(!S || S.bloodPromptDone || S.bloodPromptClicks >= 10 || TITLE || clearPrompt) return;
+  var b=L.colors && L.colors[0];
+  if(!b) return;
+  if(!S.bloodPromptArrows || S.bloodPromptArrowW !== W || S.bloodPromptArrowH !== H){
+    S.bloodPromptArrows = buildBloodPromptArrows();
+    S.bloodPromptArrowW = W;
+    S.bloodPromptArrowH = H;
+  }
+  var arrows = S.bloodPromptArrows || [];
+  var baseW = Math.max(7, Math.min(W, H) * 0.015);
+  for(var i=0;i<arrows.length;i++){
+    var a = arrows[i];
+    var pulse = 0.25 + 0.75 * Math.abs(Math.sin(time * 7 + a.phase));
+    var alpha = 0.18 + 0.82 * pulse;
+    var dx = a.tx - a.x;
+    var dy = a.ty - a.y;
+    var ang = Math.atan2(dy, dx);
+    var head = Math.max(18, Math.min(W, H) * 0.045);
+    var shaftLen = Math.max(0, Math.sqrt(dx*dx + dy*dy) - head * 1.1);
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.rotate(ang);
+    ctx.strokeStyle = "rgba(255,40,40," + alpha + ")";
+    ctx.fillStyle = "rgba(255,40,40," + alpha + ")";
+    ctx.lineWidth = baseW;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(shaftLen, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(shaftLen, 0);
+    ctx.lineTo(shaftLen - head, -head * 0.55);
+    ctx.lineTo(shaftLen - head * 0.42, 0);
+    ctx.lineTo(shaftLen - head, head * 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+}
 
 /* ---------- loop ---------- */
 var last=0;
