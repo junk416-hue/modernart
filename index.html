@@ -582,8 +582,66 @@ var thermoClicks = 0;
 var lastThermoClickTime = 0;
 var pressTimer = null;
 var longPressed = false;
+var tapTimer = null;
+var tapTarget = null;
+var tapAction = null;
+var tapKey = null;
+var tapTime = 0;
 var lastDownX = 0, lastDownY = 0;
 var pressTarget = null;
+
+function clearTapAction(){
+  if(tapTimer){ clearTimeout(tapTimer); tapTimer = null; }
+  tapTarget = null;
+  tapAction = null;
+  tapKey = null;
+  tapTime = 0;
+}
+
+function runTapAction(target, action){
+  if(!target || !action) return;
+  if(action === 'buyAuto'){
+    buyAutoColor(target.hex, target.x + target.w / 2, target.y + target.h / 2);
+  } else if(action === 'toggleGallery'){
+    S.galleryDisabled = !S.galleryDisabled;
+    tone(NOTE[YEL]*0.8, 0.25, "sine", 0.4);
+  } else if(action === 'toggleAuto'){
+    S.autoDisabled[target.hex] = !S.autoDisabled[target.hex];
+    tone(NOTE[target.hex]*0.7, 0.25, "sine", 0.4);
+  } else if(action === 'toggleShape'){
+    S.autoPickShapeEnabled = !S.autoPickShapeEnabled;
+    tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+  } else if(action === 'togglePattern'){
+    S.autoPickPatternEnabled = !S.autoPickPatternEnabled;
+    tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+  }
+}
+
+function queueTapAction(target, action, doubleAction){
+  var now = Date.now();
+  var key = target.key;
+  if(tapTimer && tapKey === key && (now - tapTime) < 300){
+    clearTapAction();
+    runTapAction(target, doubleAction);
+    return;
+  }
+  if(tapTimer){
+    var prevTarget = tapTarget;
+    var prevAction = tapAction;
+    clearTapAction();
+    runTapAction(prevTarget, prevAction);
+  }
+  tapTarget = target;
+  tapAction = action;
+  tapKey = key;
+  tapTime = now;
+  tapTimer = setTimeout(function(){
+    var queuedTarget = tapTarget;
+    var queuedAction = tapAction;
+    clearTapAction();
+    runTapAction(queuedTarget, queuedAction);
+  }, 250);
+}
 
 cv.addEventListener("pointerdown", function(e){
   e.preventDefault();
@@ -627,39 +685,39 @@ cv.addEventListener("pointerdown", function(e){
   var hitPatPick = L.patAutoPick && hitRect(x, y, L.patAutoPick);
 
   if(hitGallery && S.galleryOwned){
-    pressTarget = { type: 'gallery' };
+    pressTarget = { type: 'gallery', key: 'gallery' };
     pressTimer = setTimeout(function(){
       longPressed = true;
-      S.galleryDisabled = !S.galleryDisabled;
-      tone(NOTE[YEL]*0.8, 0.25, "sine", 0.4);
+      clearTapAction();
+      runTapAction(pressTarget, 'toggleGallery');
     }, 600);
   } else if(hitAuto && (S.auto[hitAuto.hex]||0) > 0){
-    pressTarget = { type: 'auto', hex: hitAuto.hex, x: hitAuto.x, y: hitAuto.y, w: hitAuto.w, h: hitAuto.h };
+    pressTarget = { type: 'auto', hex: hitAuto.hex, x: hitAuto.x, y: hitAuto.y, w: hitAuto.w, h: hitAuto.h, key: 'auto:' + hitAuto.hex };
     pressTimer = setTimeout(function(){
       longPressed = true;
-      S.autoDisabled[hitAuto.hex] = !S.autoDisabled[hitAuto.hex];
-      tone(NOTE[hitAuto.hex]*0.7, 0.25, "sine", 0.4);
+      clearTapAction();
+      runTapAction(pressTarget, 'toggleAuto');
     }, 600);
   } else if(hitShapePick){
     if(!S.autoPickShape){
-      pressTarget = { type: 'shapePick', buy: true, x: x, y: y };
+      pressTarget = { type: 'shapePick', buy: true, x: x, y: y, key: 'shapePick' };
     } else {
-      pressTarget = { type: 'shapePick', buy: false };
+      pressTarget = { type: 'shapePick', buy: false, key: 'shapePick' };
       pressTimer = setTimeout(function(){
         longPressed = true;
-        S.autoPickShapeEnabled = !S.autoPickShapeEnabled;
-        tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+        clearTapAction();
+        runTapAction(pressTarget, 'toggleShape');
       }, 600);
     }
   } else if(hitPatPick){
     if(!S.autoPickPattern){
-      pressTarget = { type: 'patPick', buy: true, x: x, y: y };
+      pressTarget = { type: 'patPick', buy: true, x: x, y: y, key: 'patPick' };
     } else {
-      pressTarget = { type: 'patPick', buy: false };
+      pressTarget = { type: 'patPick', buy: false, key: 'patPick' };
       pressTimer = setTimeout(function(){
         longPressed = true;
-        S.autoPickPatternEnabled = !S.autoPickPatternEnabled;
-        tone(NOTE[INK]*1.2, 0.25, "sine", 0.4);
+        clearTapAction();
+        runTapAction(pressTarget, 'togglePattern');
       }, 600);
     }
   } else {
@@ -670,19 +728,25 @@ cv.addEventListener("pointerdown", function(e){
 cv.addEventListener("pointerup", function(e){
   e.preventDefault();
   if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; }
-  // Act on a short tap. Buy taps (shapePick/patPick) never arm a pressTimer,
-  // so this must not be gated on pressTimer or those purchases never fire.
   if(!longPressed && pressTarget){
     if(pressTarget.type === 'auto'){
-      buyAutoColor(pressTarget.hex, pressTarget.x+pressTarget.w/2, pressTarget.y+pressTarget.h/2);
-    } else if(pressTarget.type === 'gallery'){
-      buyGallery();
-    } else if(pressTarget.type === 'shapePick' && pressTarget.buy){
-      if(canSpend(150)){ S.money-=150; S.autoPickShape=true; S.autoPickShapeEnabled=true; chord(NOTE[GOLD]); }
-      else warn(pressTarget.x, pressTarget.y);
-    } else if(pressTarget.type === 'patPick' && pressTarget.buy){
-      if(canSpend(150)){ S.money-=150; S.autoPickPattern=true; S.autoPickPatternEnabled=true; chord(NOTE[GOLD]); }
-      else warn(pressTarget.x, pressTarget.y);
+      queueTapAction(pressTarget, 'buyAuto', 'toggleAuto');
+    } else if(pressTarget.type === 'gallery' && S.galleryOwned){
+      queueTapAction(pressTarget, 'toggleGallery', 'toggleGallery');
+    } else if(pressTarget.type === 'shapePick'){
+      if(!S.autoPickShape){
+        if(canSpend(150)){ S.money-=150; S.autoPickShape=true; S.autoPickShapeEnabled=true; chord(NOTE[GOLD]); }
+        else warn(pressTarget.x, pressTarget.y);
+      } else {
+        queueTapAction(pressTarget, 'toggleShape', 'toggleShape');
+      }
+    } else if(pressTarget.type === 'patPick'){
+      if(!S.autoPickPattern){
+        if(canSpend(150)){ S.money-=150; S.autoPickPattern=true; S.autoPickPatternEnabled=true; chord(NOTE[GOLD]); }
+        else warn(pressTarget.x, pressTarget.y);
+      } else {
+        queueTapAction(pressTarget, 'togglePattern', 'togglePattern');
+      }
     }
   }
   pressTarget = null;
@@ -696,6 +760,7 @@ cv.addEventListener("pointermove", function(e){
       clearTimeout(pressTimer);
       pressTimer = null;
       pressTarget = null;
+      clearTapAction();
     }
   }
 });
@@ -705,6 +770,7 @@ cv.addEventListener("pointercancel", function(e){
     clearTimeout(pressTimer);
     pressTimer = null;
     pressTarget = null;
+    clearTapAction();
   }
 });
 
